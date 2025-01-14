@@ -1,0 +1,179 @@
+:root {
+  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+
+  color-scheme: light dark;
+  color: rgba(255, 255, 255, 0.87);
+  background-color: #242424;
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+a {
+  font-weight: 500;
+  color: #646cff;
+  text-decoration: inherit;
+}
+a:hover {
+  color: #535bf2;
+}
+
+body, html {
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+
+h1 {
+  font-size: 3.2em;
+  line-height: 1.1;
+}
+
+#app {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 2rem;
+  text-align: center;
+}
+
+.logo {
+  height: 6em;
+  padding: 1.5em;
+  will-change: filter;
+  transition: filter 300ms;
+}
+.logo:hover {
+  filter: drop-shadow(0 0 2em #646cffaa);
+}
+.logo.vanilla:hover {
+  filter: drop-shadow(0 0 2em #f7df1eaa);
+}
+
+.card {
+  padding: 2em;
+}
+
+.read-the-docs {
+  color: #888;
+}
+
+button {
+  border-radius: 8px;
+  border: 1px solid transparent;
+  padding: 0.6em 1.2em;
+  font-size: 1em;
+  font-weight: 500;
+  font-family: inherit;
+  background-color: #1a1a1a;
+  cursor: pointer;
+  transition: border-color 0.25s;
+}
+button:hover {
+  border-color: #646cff;
+}
+button:focus,
+button:focus-visible {
+  outline: 4px auto -webkit-focus-ring-color;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    color: #213547;
+    background-color: #ffffff;
+  }
+  a:hover {
+    color: #747bff;
+  }
+  button {
+    background-color: #f9f9f9;
+  }
+}
+
+
+#roll-buttons-container {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  align-items: center;
+}
+
+#explore {
+  display: none; /* Initially hidden */
+  top: calc(20px + 40px); /* Adjust as per the roll buttons height */
+  left: 50%;
+  transform: translateX(-50%);
+  transition: top 0.3s ease; /* Smooth transition */
+}
+
+
+/* 
+
+.current {
+
+  border-radius: 8px;
+  border: 1px solid transparent;
+  padding: 0.6em 1.2em;
+  font-size: 1em;
+  font-weight: 500;
+  font-family: inherit;
+  background-color: #1a1a1a;
+  cursor: pointer;
+  transition: border-color 0.25s;
+} */
+
+
+.overlay {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 10%; /* Adjust height to fit the half-circle */
+  background-color: rgba(0, 0, 0, 0); /* Transparent overlay */
+  display: flex;
+  justify-content: center;
+  align-items: flex-end; /* Align to the bottom of the screen */
+  z-index: 1000;
+  /* opacity: 0.1; */
+}
+
+
+
+.group-selection {
+  position: fixed; /* Fix the element at the bottom of the screen */
+  bottom: 0; /* Align it at the bottom */
+  left: 50%; /* Center it horizontally */
+  transform: translateX(-50%); /* Ensure it’s perfectly centered */
+  background-color: rgba(251, 240, 240, 0); /* Set your desired background color */
+  padding: 40px 0; /* Adjust the vertical padding to suit your design */
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+  gap: 40px;
+  width: 80%; /* Control the width of the half-circle */
+  border-radius: 2500% 2500% 0 0; /* Round only the top edges */
+  overflow: hidden; /* Ensure content stays within the shape */
+  z-index: 1000; /* Ensure the osverlay appears on top */
+}
+
+
+.group-selection button {
+  padding: 10px 20px;
+  background-color: white;
+  color: black;
+  border: none;
+  cursor: pointer;
+  border-radius: 20px;
+  transition: transform 0.3s ease, background-color 0.3s;
+
+}
+
+.group-selection button:hover {
+  background-color: #F7E0C0;
+  transform: scale(1.5);
+  
+}
