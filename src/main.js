@@ -1,6 +1,7 @@
 import './style.css';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+//import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { gsap } from "gsap";
 //import * as functions from './functions.js';
 
@@ -372,50 +373,59 @@ function onHover(cube) {
       textContainer.style.display = 'block'; // Ensure it's visible
     }
   }
-
   if (mode === themes) {
-    //createOutline(cube);
-    //cube.material.color.set(black);
+
+    boxes.filter(child => child.userData.status === cube.userData.status).forEach(element => {
+      element.material.color.set(black);
+    })
+
 
     const boundingBox = new THREE.Box3();
     
-      // Expand bounding box to encompass all cubes with the same status
-      boxes.filter(child => child.userData.status === cube.userData.status)
-           .forEach(state => boundingBox.expandByObject(state));
-    
-      // Calculate size and center of the bounding box
-      const center = new THREE.Vector3();
-      const size = new THREE.Vector3();
-      boundingBox.getCenter(center);
-      boundingBox.getSize(size);
-    
-      // Create a visual representation of the bounding box using LineSegments
-      const boxGeometry = new THREE.BoxGeometry(size.x * 1.4, size.y * 1.4, size.z * 1.4);
-      const edges = new THREE.EdgesGeometry(boxGeometry);
-      const lineMaterial = new THREE.LineBasicMaterial({ hoverColor, linewidth: 4 });
-    
-      const statusOutline = new THREE.LineSegments(edges, lineMaterial);
-      statusOutline.position.copy(center);
-      
-      // Add the outline to the scene
-      scene.add(statusOutline);
-      cube.userData.statusline = statusOutline;
-      
-      
-      const textContainer = document.getElementById('description-container');
-
-      if (textContainer) {
-        textContainer.innerHTML = '';      
-
-        const descriptionElement = document.createElement('div');
-          descriptionElement.innerText = cube.userData.status;
+    // Expand bounding box to encompass all cubes with the same status
+    boxes.filter(child => child.userData.status === cube.userData.status)
+         .forEach(state => boundingBox.expandByObject(state));
   
-        
-          textContainer.appendChild(descriptionElement);
-          textContainer.style.display = 'block'; // Ensure it's visible
-      }
-      
+    // Calculate size and center of the bounding box
+    const center = new THREE.Vector3();
+    const size = new THREE.Vector3();
+    boundingBox.getCenter(center);
+    boundingBox.getSize(size);
+  
+    // Create a filled circular outline
+    const radius = Math.max(size.x, size.y) * 0.6; // Adjust this factor as needed
+    const segments = 64; // More segments for smoother circle
+    const circleGeometry = new THREE.CircleGeometry(radius, segments);
+  
+    const circleMaterial = new THREE.MeshBasicMaterial({ 
+      color: hoverColor, 
+      transparent: false,
+      opacity: 1,  // Slightly transparent
+      side: THREE.DoubleSide 
+    });
+  
+    const statusOutline = new THREE.Mesh(circleGeometry, circleMaterial);
+    statusOutline.position.copy(center);
+   // statusOutline.rotation.x = Math.PI / 2; // Rotate to face the camera
+  
+    // Add the outline to the scene
+    scene.add(statusOutline);
+    cube.userData.statusline = statusOutline;
+  
+    const textContainer = document.getElementById('description-container');
+  
+    if (textContainer) {
+      textContainer.innerHTML = '';      
+  
+      const descriptionElement = document.createElement('div');
+      descriptionElement.innerText = cube.userData.status;
+  
+      textContainer.appendChild(descriptionElement);
+      textContainer.style.display = 'block'; // Ensure it's visible
+    }
   }
+  
+  
   }
 }
 
@@ -436,8 +446,9 @@ function addGridHelper(scene) {
   const gridHelper = new THREE.GridHelper(50, 10);
   scene.add(gridHelper);
 }
-const axesHelper = new THREE.AxesHelper( 500 ); scene.add( axesHelper );
-addGridHelper(scene);
+const axesHelper = new THREE.AxesHelper( 500 );
+//scene.add( axesHelper );
+//addGridHelper(scene);
 
 
 
@@ -797,53 +808,59 @@ function removeLines(cube) {
 }
 
 
+
 function createOutline(cube, color = 0xF7E0C0) {
   if (cube && !cube.userData.outline) {
-    const box =  new THREE.Box3().setFromObject(cube);
+    const box = new THREE.Box3().setFromObject(cube);
 
-    let factor = 0
     // Get the dimensions of the bounding box
     const size = new THREE.Vector3();
     const center = new THREE.Vector3();
     box.getSize(size);
     box.getCenter(center);
 
-    if(mode === structure){
-      factor = size.x
+    let factorX, factorY;
+    if (mode === structure) {
+      factorX = size.x;
+      factorY = size.y;
+    } else if (mode === relations) {
+      factorX = size.z;
+      factorY = size.y;
+    } else if (mode === themes) {
+      factorX = size.x;
+      factorY = size.z;
     }
-    else if(mode === relations){
-      factor = size.z
-    }
-    else if(mode === themes){
-      factor = size.x
-    }
-    const outlineGeometry = new THREE.CircleGeometry(factor / 1.8);
 
+    // Create a circle geometry (we'll scale it to make an oval)
+    const circleGeometry = new THREE.CircleGeometry(1, 64);
+
+    // Create outline material
     const outlineMaterial = new THREE.MeshBasicMaterial({
       color,
       transparent: false,
       opacity: 1,
+      side: THREE.DoubleSide // Make sure the outline is visible from both sides
     });
 
-    const outlineMesh = new THREE.Mesh(outlineGeometry, outlineMaterial);
+    // Create mesh and scale it to form an oval
+    const outlineMesh = new THREE.Mesh(circleGeometry, outlineMaterial);
+    outlineMesh.scale.set(factorX / 1.7, factorY / 0.7, 1);
     outlineMesh.position.copy(cube.position);
     scene.add(outlineMesh);
 
     // Save the outline for later removal
     cube.userData.outline = outlineMesh;
 
-    if (mode === structure){
+    // Set rotation based on mode
+    if (mode === structure) {
       outlineMesh.rotation.set(0, 0, 0);
-    }
-    else if(mode === relations){
-      outlineMesh.rotation.set(0, - (Math.PI / 2), 0);
-    }
-    else if(mode === themes){
-      outlineMesh.rotation.set(0, - Math.PI, 0);
+    } else if (mode === relations) {
+      outlineMesh.rotation.set(0, -(Math.PI / 2), 0);
+    } else if (mode === themes) {
+      outlineMesh.rotation.set(0, -Math.PI, 0);
     }
   }
 }
-
 
 
 
@@ -883,6 +900,11 @@ function removeHover(cube) {
     }
   });
 
+  boxes.filter(child => child.userData.status === cube.userData.status).forEach(element => {
+    element.material.color.set(element.userData.colour);
+  })
+
+
   //text container
     const textContainer = document.getElementById('description-container');
     if (textContainer) {
@@ -903,80 +925,93 @@ function removeHover(cube) {
 
 // positions
 
-// structure
+//structure
+
+
 function structurePos() {
   setTimeout(() => {
-
-
-//rotation
+    // Reset rotation for all cubes
     boxes.forEach(cube => {
       cube.rotation.set(0, 0, 0);
-      cube.userData.boundBox.rotation.set(0, 0, 0);
+      if (cube.userData.boundBox) {
+        cube.userData.boundBox.rotation.set(0, 0, 0);
+      }
     });
-  
 
-//levelSpacing
-    const levelSpacing = 25; // Distance between levels (y-axis)
-    const groupSpacing = 60; // Distance between groups within a level (x-axis)
-    const boxSpacing = 20;    // Distance between boxes within a cluster (x-axis)
-
-    // Set z-position to the front face of the big cube
+    const levelSpacing = 25;   // Distance between levels (y-axis)
+    const groupSpacing = 40;   // Distance between groups (x-axis)
+    const boxSpacing = 5;      // Distance between boxes in clusters (x-axis)
     const zFrontFace = bigCubeSize / 2;
 
     const levels = {};
 
-
-    let structureBoxes = boxes.filter(box => (box.userData.children.length > 0 || box.userData.parents.length > 0))//(box => box.userData.group !== "extraElement");
-  
+    let structureBoxes = boxes.filter(box => (box.userData.children.length > 0 || box.userData.parents.length > 0));
     let notStructureBoxes = boxes.filter(box => box.userData.group === "extraElement" && box.userData.children.length < 1);
-    notStructureBoxes.forEach(cube => {cube.visible = false;});
 
+    // Hide non-structural boxes
+    notStructureBoxes.forEach(cube => { cube.visible = false; });
 
+    // Group cubes by their level
     structureBoxes.forEach(cube => {
       const level = cube.userData.level;
       if (!levels[level]) levels[level] = [];
       levels[level].push(cube);
     });
 
-
-    // Calculate the total height of all levels to center along the y-axis
     const totalLevels = Object.keys(levels).length;
     const totalHeight = (totalLevels - 1) * levelSpacing;
     const centerYOffset = totalHeight / 2;
 
     Object.keys(levels).forEach((yLevel, levelIndex) => {
       const cubesAtLevel = levels[yLevel];
-
-      // Group cubes by their `group` value
       const clusters = {};
+
+      // Group cubes by `group`
       cubesAtLevel.forEach(cube => {
         const cluster = cube.userData.group;
         if (!clusters[cluster]) clusters[cluster] = [];
         clusters[cluster].push(cube);
       });
 
-      // Calculate total width of all clusters, including box spacing
       let totalWidth = 0;
-      Object.values(clusters).forEach((cubesInCluster) => {
-        const clusterWidth = (cubesInCluster.length - 1) * boxSpacing;
-        totalWidth += clusterWidth + groupSpacing;
+      let maxClusterHeight = 0;
+
+      // Calculate total width and max height for the level
+      Object.values(clusters).forEach(cubesInCluster => {
+        let clusterWidth = 0;
+        let clusterHeight = 0;
+        cubesInCluster.forEach(cube => {
+          if (!cube.userData.boundBox.geometry.boundingBox) {
+            cube.userData.boundBox.geometry.computeBoundingBox();
+          }
+          const boundBox = cube.userData.boundBox.geometry.boundingBox;
+          clusterWidth += boundBox.max.x - boundBox.min.x + boxSpacing;
+          clusterHeight = Math.max(clusterHeight, boundBox.max.y - boundBox.min.y);
+        });
+        totalWidth += clusterWidth;
+        maxClusterHeight = Math.max(maxClusterHeight, clusterHeight);
       });
-      totalWidth -= groupSpacing; // Remove the last unnecessary group spacing
 
+      totalWidth += (Object.keys(clusters).length - 1) * groupSpacing;
       const levelOffsetX = -totalWidth / 2;
-
       let currentX = levelOffsetX;
 
-      Object.keys(clusters).forEach((clusterKey) => {
+      Object.keys(clusters).forEach(clusterKey => {
         const cubesInCluster = clusters[clusterKey];
+        let clusterWidth = 0;
 
         cubesInCluster.forEach((cube, i) => {
-          const x = currentX + i * boxSpacing;               // Spread along the x-axis
-          const y = centerYOffset - levelIndex * levelSpacing; // Spread along the y-axis
-          const z = zFrontFace;                                 // Fixed on the front face
+          if (!cube.userData.boundBox.geometry.boundingBox) {
+            cube.userData.boundBox.geometry.computeBoundingBox();
+          }
+          const boundBox = cube.userData.boundBox.geometry.boundingBox;
+          const cubeWidth = boundBox.max.x - boundBox.min.x;
+          const cubeHeight = boundBox.max.y - boundBox.min.y;
 
-        // cube.userData.boundBox.set(x,y,z)
-        
+          const x = currentX + clusterWidth + cubeWidth / 2;
+          const y = centerYOffset - levelIndex * levelSpacing - (maxClusterHeight - cubeHeight) / 2;
+          const z = zFrontFace;
+
           // Animate the cube's position
           gsap.to(cube.position, {
             duration: 1,
@@ -985,21 +1020,22 @@ function structurePos() {
             z: z,
             ease: "power2.inOut",
             onUpdate: () => {
-              // Update bounding box after the position is updated
-
-              boxes.forEach(box => {
-                box.userData.boundBox.position.copy(box.position);
-              })   
+              if (cube.userData.boundBox) {
+                cube.userData.boundBox.position.copy(cube.position);
+              }
             }
           });
+
+          clusterWidth += cubeWidth + boxSpacing;
         });
 
-        // Update currentX for the next cluster
-        currentX += (cubesInCluster.length - 1) * boxSpacing + groupSpacing;
+        currentX += clusterWidth + groupSpacing;
       });
     });
   }, 500);
 }
+
+
 
 
 function structureExplorePos() {
@@ -1092,98 +1128,95 @@ boxes.forEach(cube => {
 
 //relations
 function relationsPos() {
-setTimeout(() => {
-  
-  // roteteCubes
-  boxes.forEach(cube => {
-    cube.rotation.set(0, - (Math.PI / 2), 0);
-    cube.userData.boundBox.rotation.set(0, - (Math.PI / 2), 0);
+  setTimeout(() => {
+    // Rotate cubes
+    boxes.forEach(cube => {
+      cube.rotation.set(0, -(Math.PI / 2), 0);
+      cube.userData.boundBox.rotation.set(0, -(Math.PI / 2), 0);
+    });
 
-  });
+    const minDistance = 30;     // Minimum distance between cubes to avoid overlap
+    const maxAttempts = 100;    // Max retries to find a non-overlapping position
+    const relationForce = 50;   // Force to pull related cubes closer
+    const repulsionForce = 10;  // Force to push unrelated cubes apart
 
+    let planeWidth = bigCubeSize;
+    let planeHeight = bigCubeSize;
+    const leftFaceX = -bigCubeSize / 2;
 
-  const groupSpacing = 50;    // Spacing between groups
-  const cloudSpread = 40;     // Spread of cubes within each group
-  const minDistance = 30;     // Minimum distance between cubes to avoid overlap
-  const maxAttempts = 50;     // Max retries to find a non-overlapping position   // Assuming the big cube has a size of 100 units
+    const placedPositions = [];
 
-  // Group cubes by their `group` value
-  const clusters = {};
-  boxes.forEach(cube => {
-    const cluster = cube.userData.group;
-    if (!clusters[cluster]) clusters[cluster] = [];
-    clusters[cluster].push(cube);
-  });
+    // Helper function to check for collisions
+    function checkCollision(pos) {
+      return placedPositions.some(placedPos => {
+        const dx = pos.y - placedPos.y;
+        const dy = pos.z - placedPos.z;
+        return Math.sqrt(dx * dx + dy * dy) < minDistance;
+      });
+    }
 
-  // Arrange groups in a grid layout
-  const groupKeys = Object.keys(clusters);
-  const numCols = Math.ceil(Math.sqrt(groupKeys.length));
-  const numRows = Math.ceil(groupKeys.length / numCols);
+    // Helper function to calculate forces
+    function calculateForces(cube, pos) {
+      let forceY = 0, forceZ = 0;
+      boxes.forEach(otherCube => {
+        if (cube !== otherCube) {
+          const dy = pos.y - otherCube.position.y;
+          const dz = pos.z - otherCube.position.z;
+          const distance = Math.sqrt(dy * dy + dz * dz);
+          const force = cube.userData.relations.includes(otherCube.userData.id) ? relationForce : -repulsionForce;
+          forceY += (dy / distance) * force;
+          forceZ += (dz / distance) * force;
+        }
+      });
+      return { forceY, forceZ };
+    }
 
-  // Calculate total width and height of the grid to center the layout
-  const totalWidth = (numCols - 1) * groupSpacing;
-  const totalHeight = (numRows - 1) * groupSpacing;
-
-  // Offsets to center the grid on the left face
-  const centerZOffset = -totalWidth / 2;
-  const centerYOffset = totalHeight / 2;
-  const leftFaceX = -bigCubeSize / 2; // Position along the left face
-
-  groupKeys.forEach((clusterKey, index) => {
-    // Calculate grid position for each group (using z and y instead of x and y)
-    const col = index % numCols;
-    const row = Math.floor(index / numCols);
-    const groupZ = centerZOffset + col * groupSpacing;   // Spread groups along the z-axis
-    const groupY = centerYOffset - row * groupSpacing;   // Spread groups along the y-axis
-
-    const cubesInCluster = clusters[clusterKey];
-
-    // Position cubes within each group with collision avoidance
-    const placedPositions = []; // Store placed positions to check for collisions
-
-    cubesInCluster.forEach(cube => {
+    // Position cubes
+    boxes.forEach(cube => {
       let validPosition = false;
-      let randomZ, randomY, randomX;
       let attempts = 0;
+      let pos = { x: leftFaceX, y: 0, z: 0 };
 
       while (!validPosition && attempts < maxAttempts) {
-        randomZ = groupZ + (Math.random() - 0.5) * cloudSpread;  // Random spread along z-axis //(Math.random() - 0.5) 
-        randomY = groupY + (Math.random() - 0.5) * cloudSpread;  // Random spread along y-axis
-        randomX = leftFaceX;                                      // Align on the left face
+        const { forceY, forceZ } = calculateForces(cube, pos);
+        pos.y += forceY * 0.1;
+        pos.z += forceZ * 0.1;
 
-        // Ensure cubes do not overlap within the group
-        validPosition = placedPositions.every(pos => {
-          const dx = pos.x - randomX;
-          const dy = pos.y - randomY;
-          const dz = pos.z - randomZ;
-          const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
-          return distance >= minDistance;
-        });
+        // Keep within expanded plane
+        pos.y = Math.max(-planeHeight/2, Math.min(planeHeight/2, pos.y));
+        pos.z = Math.max(-planeWidth/2, Math.min(planeWidth/2, pos.z));
 
-        attempts++;
+        if (!checkCollision(pos)) {
+          validPosition = true;
+        } else {
+          attempts++;
+        }
       }
 
+      if (!validPosition) {
+        // Expand plane if needed
+        planeWidth += 10;
+        planeHeight += 10;
+        pos.y = (Math.random() - 0.5) * planeHeight;
+        pos.z = (Math.random() - 0.5) * planeWidth;
+      }
 
+      placedPositions.push(pos);
 
       gsap.to(cube.position, {
-        duration: 1,            // Animation duration in seconds
-        x: randomX,
-        y: randomY,
-        z: randomZ,
-        ease: "power2.inOut", 
+        duration: 1,
+        x: pos.x,
+        y: pos.y,
+        z: pos.z,
+        ease: "power2.inOut",
         onUpdate: () => {
-          boxes.forEach(box => {
-            box.userData.boundBox.position.copy(box.position);
-          })   
-        }  // Smooth easing function
+          cube.userData.boundBox.position.copy(cube.position);
+        }
       });
-
-      // Save the new position to avoid overlaps
-      placedPositions.push({ x: randomX, y: randomY, z: randomZ });
     });
-  });
-}, 500);
+  }, 500);
 }
+
 
 
 
@@ -1243,92 +1276,6 @@ function relationsExplorePos() {
 
 
 
-
-
-
-
-
-
-// function themesPos() {
-//   setTimeout(() => {
-//     // Rotate cubes to face the correct direction
-//     let themesBoxes = boxes.filter(box => box.visible === true);
-
-//     boxes.forEach(cube => {
-//       cube.rotation.set(0, -Math.PI, 0);
-//       cube.userData.boundBox.rotation.set(0, -(Math.PI / 2), 0);
-//     });
-
-//     const statusSpacing = 100;   // Spacing between status clusters
-//     const boxSpread = 80;       // Spread of boxes within each cluster
-//     const minDistance = 50;     // Minimum distance between boxes
-//     const maxAttempts = 100;     // Max retries to avoid overlap
-
-//     // Group cubes by status
-//     const statusClusters = {};
-//     themesBoxes.forEach(cube => {
-//       const status = cube.userData.status || "default";
-//       if (!statusClusters[status]) statusClusters[status] = [];
-//       statusClusters[status].push(cube);
-//     });
-
-//     const statusKeys = Object.keys(statusClusters);
-//     const numCols = Math.ceil(Math.sqrt(statusKeys.length));
-//     const numRows = Math.ceil(statusKeys.length / numCols);
-
-//     const totalWidth = (numCols - 1) * statusSpacing;
-//     const totalHeight = (numRows - 1) * statusSpacing;
-//     const centerXOffset = -totalWidth / 2;
-//     const centerYOffset = totalHeight / 2;
-//     const faceZ = -bigCubeSize / 2;
-
-//     statusKeys.forEach((statusKey, index) => {
-//       const colIndex = index % numCols;
-//       const rowIndex = Math.floor(index / numCols);
-//       const groupX = centerXOffset + colIndex * statusSpacing;
-//       const groupY = centerYOffset - rowIndex * statusSpacing;
-
-//       const cubesInStatus = statusClusters[statusKey];
-//       const placedPositions = [];
-
-//       cubesInStatus.forEach(cube => {
-//         let validPosition = false;
-//         let randomX, randomY, randomZ;
-//         let attempts = 0;
-
-//         while (!validPosition && attempts < maxAttempts) {
-//           randomX = groupX + (1.2*(Math.random() - 0.9)) * boxSpread;
-//           randomY = groupY + (1.2*(Math.random() - 0.9)) * boxSpread;
-//           randomZ = faceZ;
-
-//           validPosition = placedPositions.every(pos => {
-//             const dx = pos.x - randomX;
-//             const dy = pos.y - randomY;
-//             const dz = pos.z - randomZ;
-//             return Math.sqrt(dx * dx + dy * dy + dz * dz) >= minDistance;
-//           });
-
-//           attempts++;
-//         }
-
-//         // Animate box placement
-//         gsap.to(cube.position, {
-//           duration: 1,
-//           x: randomX,
-//           y: randomY,
-//           z: randomZ,
-//           ease: "power2.inOut",
-//           onUpdate: () => cube.userData.boundBox.position.copy(cube.position)
-//         });
-
-//         placedPositions.push({ x: randomX, y: randomY, z: randomZ });
-//       });
-//     });
-//   }, 500);
-// }
-
-
-
 function themesPos() {
   setTimeout(() => {
     // Rotate cubes to face the correct direction
@@ -1336,14 +1283,13 @@ function themesPos() {
 
     boxes.forEach(cube => {
       cube.rotation.set(0, -Math.PI, 0);
-      cube.userData.boundBox.rotation.set(0, -Math.PI , 0);
+      cube.userData.boundBox.rotation.set(0, -Math.PI, 0);
     });
 
     // Base constants
-    const baseStatusSpacing = 120;
-    const baseBoxSpread = 60;
-    const minDistance = 60;
-    const maxAttempts = 100;
+    const baseClusterSpacing = 30; // Spacing between cluster centers
+    const baseBoxSpread = 10; // Initial spread within clusters
+    const minClusterDistance = 10; // Minimum distance between cluster centers
     const faceZ = -bigCubeSize / 2;
 
     // Group cubes by status
@@ -1354,144 +1300,130 @@ function themesPos() {
       statusClusters[status].push(cube);
     });
 
-    // Compute layout grid dimensions
     const statusKeys = Object.keys(statusClusters);
-    const numCols = Math.ceil(Math.sqrt(statusKeys.length));
-    const numRows = Math.ceil(statusKeys.length / numCols);
 
-    // Compute total width and height for centering
-    const clusterSizes = statusKeys.map(status => statusClusters[status].length);
-    const maxClusterSize = Math.max(...clusterSizes);
-    const statusSpacing = Math.max(baseStatusSpacing, maxClusterSize * 0.6); // *10
+    // Initialize cluster centers
+    const clusterCenters = statusKeys.map((status, index) => {
+      const angle = (index / statusKeys.length) * Math.PI * 2;
+      const radius = baseClusterSpacing * Math.sqrt(statusKeys.length);
+      return new THREE.Vector3(
+        Math.cos(angle) * radius,
+        Math.sin(angle) * radius,
+        faceZ
+      );
+    });
 
-    const totalWidth = (numCols - 1) * statusSpacing;
-    const totalHeight = (numRows - 1) * statusSpacing;
-    const centerXOffset = -totalWidth / 2;
-    const centerYOffset = totalHeight / 2;
+    // Force-directed placement of cluster centers
+    for (let iteration = 0; iteration < 100; iteration++) {
+      statusKeys.forEach((status, i) => {
+        let forceX = 0, forceY = 0;
+        statusKeys.forEach((otherStatus, j) => {
+          if (i !== j) {
+            const dx = clusterCenters[i].x - clusterCenters[j].x;
+            const dy = clusterCenters[i].y - clusterCenters[j].y;
+            const distance = Math.sqrt(dx * dx + dy * dy) || 1;
+            const force = Math.max(0, minClusterDistance - distance) / distance;
+            forceX += dx * force;
+            forceY += dy * force;
+          }
+        });
+        clusterCenters[i].x += forceX * 0.1;
+        clusterCenters[i].y += forceY * 0.1;
+      });
+    }
 
-    statusKeys.forEach((statusKey, index) => {
-      const colIndex = index % numCols;
-      const rowIndex = Math.floor(index / numCols);
-      const groupX = centerXOffset + colIndex * statusSpacing;
-      const groupY = centerYOffset - rowIndex * statusSpacing;
+    // Position cubes within clusters
+    statusKeys.forEach((status, clusterIndex) => {
+      const cubesInStatus = statusClusters[status];
+      const clusterCenter = clusterCenters[clusterIndex];
 
-      const cubesInStatus = statusClusters[statusKey];
-      const placedPositions = [];
-
+      // Initialize positions within cluster
       cubesInStatus.forEach(cube => {
-        let validPosition = false;
-        let randomX, randomY, randomZ;
-        let attempts = 0;
+        cube.position.x = clusterCenter.x + (Math.random() - 0.5) * baseBoxSpread;
+        cube.position.y = clusterCenter.y + (Math.random() - 0.5) * baseBoxSpread;
+        cube.position.z = faceZ;
+      });
 
-        while (!validPosition && attempts < maxAttempts) {
-          randomX = groupX + (Math.random() - 0.5) * baseBoxSpread;
-          randomY = groupY + (Math.random() - 0.5) * baseBoxSpread;
-          randomZ = faceZ;
-
-          validPosition = placedPositions.every(pos => {
-            const dx = pos.x - randomX;
-            const dy = pos.y - randomY;
-            const dz = pos.z - randomZ;
-            return Math.sqrt(dx * dx + dy * dy + dz * dz) >= minDistance;
+      // Force-directed placement within cluster
+      for (let iteration = 0; iteration < 50; iteration++) {
+        cubesInStatus.forEach((cube, i) => {
+          let forceX = 0, forceY = 0;
+          
+          cubesInStatus.forEach((otherCube, j) => {
+            if (i !== j) {
+              const dx = cube.position.x - otherCube.position.x;
+              const dy = cube.position.y - otherCube.position.y;
+              const distance = Math.sqrt(dx * dx + dy * dy) || 1;
+              const force = (30 - distance) / distance;
+              forceX += dx * force;
+              forceY += dy * force;
+            }
           });
 
-          attempts++;
-        }
+          // Add a centering force
+          forceX += (clusterCenter.x - cube.position.x) * 0.1;
+          forceY += (clusterCenter.y - cube.position.y) * 0.1;
 
-        // Animate box placement
+          cube.position.x += forceX * 0.05;
+          cube.position.y += forceY * 0.05;
+        });
+      }
+
+      // Animate final positions
+      cubesInStatus.forEach(cube => {
         gsap.to(cube.position, {
           duration: 1,
-          x: randomX,
-          y: randomY,
-          z: randomZ,
+          x: cube.position.x,
+          y: cube.position.y,
+          z: cube.position.z,
           ease: "power2.inOut",
           onUpdate: () => {
-            boxes.forEach(box => {
-             box.userData.boundBox.position.copy(box.position);
-            })   
-          } //cube.userData.boundBox.position.copy(cube.position)
+            cube.userData.boundBox.position.copy(cube.position);
+          }
         });
-
-        placedPositions.push({ x: randomX, y: randomY, z: randomZ });
       });
     });
+
+    // Update bounding boxes and outlines
+    updateBoundingBoxes();
   }, 500);
 }
 
+function updateBoundingBoxes() {
+  const statusClusters = {};
+  boxes.forEach(cube => {
+    if (cube.visible) {
+      const status = cube.userData.status || "default";
+      if (!statusClusters[status]) statusClusters[status] = [];
+      statusClusters[status].push(cube);
+    }
+  });
 
+  Object.entries(statusClusters).forEach(([status, cubes]) => {
+    const boundingBox = new THREE.Box3();
+    cubes.forEach(cube => boundingBox.expandByObject(cube));
 
+    const center = new THREE.Vector3();
+    const size = new THREE.Vector3();
+    boundingBox.getCenter(center);
+    boundingBox.getSize(size);
 
+    // Create or update the outline
+    let statusOutline = scene.getObjectByName(`statusOutline_${status}`);
+    if (!statusOutline) {
+      const boxGeometry = new THREE.BoxGeometry(1, 1, 1);
+      const edges = new THREE.EdgesGeometry(boxGeometry);
+      const lineMaterial = new THREE.LineBasicMaterial({ color: 0xF7E0C0, linewidth: 2 });
+      statusOutline = new THREE.LineSegments(edges, lineMaterial);
+      statusOutline.name = `statusOutline_${status}`;
+      //scene.add(statusOutline);
+    }
 
-
-
-// function themesPos() {
-//   setTimeout(() => {
-//     // Rotate cubes to face the correct direction
-//     boxes.forEach(cube => {
-//       cube.rotation.set(0, -Math.PI, 0);
-//       cube.userData.boundBox.rotation.set(0, -(Math.PI / 2), 0);
-//     });
-
-//     const statusSpacing = 100;  // Space between status clusters
-//     const cubeSize = 10;        // Space between individual cubes in a cluster
-//     const faceZ = -bigCubeSize / 2; // Fixed Z-position on the cube face
-
-//     // Group cubes by status
-//     const statusClusters = {};
-//     boxes.forEach(cube => {
-//       const status = cube.userData.status || "default";
-//       if (!statusClusters[status]) statusClusters[status] = [];
-//       statusClusters[status].push(cube);
-//     });
-
-//     const statusKeys = Object.keys(statusClusters);
-//     const numCols = Math.ceil(Math.sqrt(statusKeys.length)); // Grid columns for status clusters
-//     const numRows = Math.ceil(statusKeys.length / numCols);
-
-//     const totalWidth = (numCols - 1) * statusSpacing;
-//     const totalHeight = (numRows - 1) * statusSpacing;
-//     const centerXOffset = -totalWidth / 2;
-//     const centerYOffset = totalHeight / 2;
-
-//     statusKeys.forEach((statusKey, index) => {
-//       const colIndex = index % numCols;
-//       const rowIndex = Math.floor(index / numCols);
-//       const groupX = centerXOffset + colIndex * statusSpacing;
-//       const groupY = centerYOffset - rowIndex * statusSpacing;
-
-//       const cubesInStatus = statusClusters[statusKey];
-//       const gridCols = Math.ceil(Math.sqrt(cubesInStatus.length)); // Grid columns for individual cubes
-//       const gridRows = Math.ceil(cubesInStatus.length / gridCols);
-
-//       cubesInStatus.forEach((cube, cubeIndex) => {
-//         const cubeColIndex = cubeIndex % gridCols;
-//         const cubeRowIndex = Math.floor(cubeIndex / gridCols);
-
-//         const cubeX = groupX + cubeColIndex * cubeSize - (gridCols * cubeSize) / 2;
-//         const cubeY = groupY - cubeRowIndex * cubeSize + (gridRows * cubeSize) / 2;
-//         const cubeZ = faceZ;
-
-//         // Animate cube to grid position
-//         gsap.to(cube.position, {
-//           duration: 1,
-//           x: cubeX,
-//           y: cubeY,
-//           z: cubeZ,
-//           ease: "power2.inOut",
-//           onUpdate: () => cube.userData.boundBox.position.copy(cube.position)
-//         });
-//       });
-//     });
-//   }, 500);
-// }
-
-
-
-
-
-
-
-
+    // Update the outline position and scale
+    statusOutline.position.copy(center);
+    statusOutline.scale.set(size.x * 1.2, size.y * 1.2, size.z * 1.2);
+  });
+}
 
 
   // Animation loop
@@ -1541,19 +1473,6 @@ function themesPos() {
             // Example
 
 
-  // Example boxes
-// Parent level 0
-
-
-
-
-
-
-// const cA = createBox(null);  // Top-level box (Primordial Deities)
-// scene.add(cA);
-
-
-
 //ca
 const cA = createBox(
   "cA",
@@ -1563,213 +1482,185 @@ const cA = createBox(
 
 
 
-
-
-
-
-
-
-const chaos = createBox(
-  "Chaos",
-  "The primeval void from which everything in existence sprang. Represents the initial state of emptiness before creation.",
-  "Immortal"
+// Creating concepts
+const human_experience = createBox(
+  "Human Experience",
+  "The totality of concepts, emotions, relationships, and activities defining human life.",
+  "Root Concept"
 );
 
-const gaia = createBox(
-  "Gaia",
-  "Personification of the Earth and the mother of all life. She gave birth to the Titans, giants, and other primordial beings.",
-  "Immortal"
+const social_concept = createBox(
+  "Social Concept",
+  "Concepts related to interactions and relationships between individuals or groups.",
+  "Category of Human Experience"
 );
 
-const uranus = createBox(
-  "Uranus",
-  "Personification of the sky and the heavens. Known for fathering the Titans with Gaia.",
-  "Immortal"
+const psychological_concept = createBox(
+  "Psychological Concept",
+  "Concepts concerning the mind, emotions, and individual behavior.",
+  "Category of Human Experience"
 );
 
-const cronus = createBox(
-  "Cronus",
-  "The youngest of the Titans who overthrew his father Uranus. Known as the god of time and the harvest.",
-  "Immortal"
+const health_concept = createBox(
+  "Health Concept",
+  "Concepts related to the physical and mental well-being of individuals.",
+  "Category of Human Experience"
 );
 
-const rhea = createBox(
-  "Rhea",
-  "Titaness of fertility, motherhood, and generation. Known as the mother of the Olympian gods.",
-  "Immortal"
+const friendship = createBox(
+  "Friendship",
+  "A close and voluntary interpersonal relationship characterized by mutual affection, trust, and support.",
+  "Social Concept"
 );
 
-const nyx = createBox(
-  "Nyx",
-  "Primordial goddess of the night. Known for her power and mysterious nature.",
-  "Immortal"
+const social_support = createBox(
+  "Social Support",
+  "Assistance and protection provided by others, contributing to an individual's well-being.",
+  "Social Concept"
 );
 
-const erebus = createBox(
-  "Erebus",
-  "Primordial deity representing darkness and shadow. One of the first entities to emerge from Chaos.",
-  "Immortal"
+const mental_health = createBox(
+  "Mental Health",
+  "A person's condition regarding their psychological and emotional well-being.",
+  "Health Concept"
 );
 
-const tartarus = createBox(
-  "Tartarus",
-  "Primordial deity and the deep abyss used as a dungeon for the Titans and a place of punishment.",
-  "Immortal"
+const physical_health = createBox(
+  "Physical Health",
+  "The condition of a person's body, including the absence of illness and the fitness to perform daily activities.",
+  "Health Concept"
 );
 
-const pontus = createBox(
-  "Pontus",
-  "Primordial god of the sea. Represents the seas before Poseidon.",
-  "Immortal"
+const loneliness = createBox(
+  "Loneliness",
+  "A state of solitude or being alone, which can negatively impact mental and physical health.",
+  "Psychological Concept"
 );
 
-const zeus = createBox(
-  "Zeus", 
-  "King of the gods, ruler of Mount Olympus, and god of the sky, weather, law, and order. Known for his thunderbolt and numerous affairs with mortals and goddesses.", 
-  "Immortal"
+const peer_rejection = createBox(
+  "Peer Rejection",
+  "The experience of being deliberately excluded by peers, often leading to negative psychological outcomes.",
+  "Social Concept"
 );
 
-const hera = createBox(
-  "Hera", 
-  "Queen of the gods and goddess of marriage, women, childbirth, and family. Known for her jealousy and protection of married women.", 
-  "Immortal"
+const self_esteem = createBox(
+  "Self-Esteem",
+  "An individual's subjective evaluation of their own worth.",
+  "Psychological Concept"
 );
 
-const poseidon = createBox(
-  "Poseidon", 
-  "God of the sea, earthquakes, storms, and horses. Known for his volatile temperament and rivalry with other gods.", 
-  "Immortal"
+const social_development = createBox(
+  "Social Development",
+  "The process by which individuals acquire the values, behaviors, and skills necessary to interact effectively within society.",
+  "Developmental Process"
 );
 
-const hades = createBox(
-  "Hades", 
-  "God of the underworld and the dead. Rules over the souls of the departed and guards the treasures of the earth.", 
-  "Immortal"
+const dissolution_of_friendship = createBox(
+  "Dissolution of Friendship",
+  "The process through which a friendship ends, which can lead to emotional distress.",
+  "Social Process"
 );
 
-const athena = createBox(
-  "Athena", 
-  "Goddess of wisdom, war, strategy, and crafts. Known for her intelligence, fairness, and role as a protector of cities.", 
-  "Immortal"
+// Enhancing concepts hierarchically and semantically
+enhanceBox(human_experience, 
+  [cA], 
+  []
 );
 
-const aphrodite = createBox(
-  "Aphrodite", 
-  "Goddess of love, beauty, pleasure, and desire. Born from the sea foam and known for her irresistible charm.", 
-  "Immortal"
+enhanceBox(social_concept, 
+  [human_experience], 
+  [
+    [friendship, "Friendship is a type of social relationship"],
+    [social_support, "Social support emerges from human interactions"],
+    [peer_rejection, "Peer rejection is a social experience"],
+    [dissolution_of_friendship, "Friendship dissolution is a social process"]
+  ]
 );
 
-const heracles = createBox(
-  "Heracles", 
-  "Demigod hero known for his extraordinary strength and courage. Famous for completing the Twelve Labors.", 
-  "Demigod"
+enhanceBox(psychological_concept, 
+  [human_experience], 
+  [
+    [loneliness, "Loneliness affects the human psyche"],
+    [self_esteem, "Self-esteem is a fundamental psychological aspect"]
+  ]
 );
 
-// const achilles = createBox(
-//   "Achilles", 
-//   "Greek hero of the Trojan War, renowned for his strength, bravery, and near invincibility, except for his heel.", 
-//   "Mortal"
-// );
-
-const odysseus = createBox(
-  "Odysseus", 
-  "King of Ithaca, famed for his cunning intellect and resourcefulness. Hero of the Odyssey and the Trojan War.", 
-  "Mortal"
+enhanceBox(health_concept, 
+  [human_experience], 
+  [
+    [mental_health, "Mental health is a key dimension of well-being"],
+    [physical_health, "Physical health contributes to overall well-being"]
+  ]
 );
 
-const nereus = createBox(
-  "Nereus",
-  "Primordial sea god known as the 'Old Man of the Sea.' Renowned for his truthfulness and gift of prophecy.",
-  "Immortal"
+enhanceBox(friendship, 
+  [social_concept], 
+  [
+    [social_support, "Friendship often involves providing social support"],
+    [self_esteem, "Friendship can enhance self-esteem"],
+    [dissolution_of_friendship, "Friendship can dissolve over time"]
+  ]
 );
 
-const circe = createBox(
-  "Circe",
-  "Enchantress and sorceress, known for her ability to transform men into animals. Encountered by Odysseus during his travels.",
-  "Mortal"
+enhanceBox(social_support, 
+  [social_concept], 
+  [
+    [mental_health, "Social support contributes to mental health"],
+    [physical_health, "Social support can improve physical health outcomes"]
+  ]
 );
 
-const apollo = createBox(
-  "Apollo",
-  "God of the sun, music, poetry, prophecy, and healing. Known for his beauty and wisdom.",
-  "Immortal"
+enhanceBox(mental_health, 
+  [health_concept], 
+  [
+    [loneliness, "Poor mental health can result from loneliness"],
+    [self_esteem, "Self-esteem influences mental health"]
+  ]
 );
 
-const ares = createBox(
-  "Ares",
-  "God of war and violence. Known for his bloodlust and quick temper.",
-  "Immortal"
+enhanceBox(physical_health, 
+  [health_concept], 
+  [
+    [social_support, "Social support benefits physical health"],
+    [mental_health, "Physical and mental health are interconnected"]
+  ]
 );
 
-
-//news
-
-const typhon = createBox(
-  "Typhon",
-  "A monstrous giant and one of the deadliest creatures in Greek mythology. Known as the father of many fearsome monsters.",
-  "Giant"
+enhanceBox(loneliness, 
+  [psychological_concept], 
+  [
+    [peer_rejection, "Peer rejection often results in loneliness"],
+    [mental_health, "Loneliness negatively affects mental health"]
+  ]
 );
 
-const echidna = createBox(
-  "Echidna",
-  "Half-woman, half-snake creature known as the 'Mother of Monsters.' She bore many of the most terrifying creatures in Greek mythology.",
-  "Giant"
+enhanceBox(peer_rejection, 
+  [social_concept], 
+  [
+    [self_esteem, "Peer rejection can harm self-esteem"]
+  ]
 );
 
-
-const hydra = createBox(
-  "Hydra",
-  "Serpent-like water monster with multiple heads; when one is cut off, two grow in its place. Defeated by Heracles.",
-  "Beast"
+enhanceBox(self_esteem, 
+  [psychological_concept], 
+  [
+    [friendship, "Friendship enhances self-esteem"],
+    [social_development, "Self-esteem is crucial for social development"]
+  ]
 );
 
-const chimera = createBox(
-  "Chimera",
-  "Fire-breathing creature with the body of a lion, a goat's head protruding from its back, and a serpent as a tail.",
-  "Beast"
+enhanceBox(social_development, 
+  [social_concept], 
+  [
+    [self_esteem, "Self-esteem plays a role in social interactions"]
+  ]
 );
 
-const hecate = createBox(
-  "Hecate",
-  "Goddess of magic, witchcraft, ghosts, and necromancy. Often depicted holding two torches and associated with crossroads.",
-  "Immortal"
-);
-
-// const selene = createBox(
-//   "Selene",
-//   "Goddess of the Moon, often depicted driving a chariot across the night sky.",
-//   "Immortal"
-// );
-
-const eos = createBox(
-  "Eos",
-  "Goddess of the dawn who opens the gates of heaven each morning for the sun to rise.",
-  "Immortal"
-);
-
-// const hyperion = createBox(
-//   "Hyperion",
-//   "One of the twelve Titans and personification of heavenly light. Father of Helios, Selene, and Eos.",
-//   "Immortal"
-// );
-
-const helios = createBox(
-  "Helios",
-  "Titan god of the Sun, who drives his chariot across the sky each day.",
-  "Immortal"
-);
-
-const nemesis = createBox(
-  "Nemesis",
-  "Goddess of retribution and revenge, punishing those who succumb to hubris and arrogance.",
-  "Immortal"
-);
-
-//new helper
-const narcissus = createBox(
-  "narcissus",
-  "",
-  "helperElement"
+enhanceBox(dissolution_of_friendship, 
+  [social_concept], 
+  [
+    [loneliness, "Friendship dissolution may lead to loneliness"]
+  ]
 );
 
 
@@ -1778,303 +1669,12 @@ const narcissus = createBox(
 
 
 
-// helpers
-
-
-
-// const alcmene = createBox(
-//   "alcmene",
-//   "",
-//   "helperElement"
-// );
-
-// const peleus = createBox(
-//   "peleus",
-//   "",
-//   "helperElement"
-// );
-
-// const thetis = createBox(
-//   "thetis",
-//   "",
-//   "helperElement"
-// );
-
-// const laertes = createBox(
-//   "laertes",
-//   "",
-//   "helperElement"
-// );
-
-// const anticleia = createBox(
-//   "anticleia",
-//   "",
-//   "helperElement"
-// );
-
-// const helios = createBox(
-//   "helios",
-//   "",
-//   "helperElement"
-// );
-
-// const leto = createBox(
-//   "leto",
-//   "",
-//   "helperElement"
-// );
-
-
-
-
-
-
-const hector = createBox(
-  "hector",
-  "",
-  "helperElement"
-);
-
-
-const eurystheus = createBox(
-  "eurystheus",
-  "",
-  "helperElement"
-);
-
-const patroclus = createBox(
-  "patroclus",
-  "",
-  "helperElement"
-);
-
-const agamemnon = createBox(
-  "agamemnon",
-  "",
-  "helperElement"
-);
-const cerberus = createBox(
-  "cerberus",
-  "",
-  "helperElement"
-);
-
-const pygmalion = createBox(
-  "pygmalion",
-  "",
-  "helperElement"
-);
-
-const arachne = createBox(
-  "arachne",
-  "",
-  "helperElement"
-);
-
-const orpheus = createBox(
-  "orpheus",
-  "",
-  "helperElement"
-);
-
-const persephone = createBox(
-  "persephone",
-  "",
-  "helperElement"
-);
-
-const paris = createBox(
-  "paris",
-  "",
-  "helperElement"
-);
-
-const daphne = createBox(
-  "daphne",
-  "",
-  "helperElement"
-);
-
-const asclepius = createBox(
-  "asclepius",
-  "",
-  "helperElement"
-);
 
 
 
 enhanceBox(cA, [null],[[]])
 
 
-enhanceBox(chaos, [cA], [
-  [gaia, "Brought forth Gaia, who personifies the Earth and gives structure to the cosmos."],
-  [nyx, "Generated Nyx, the goddess of night, who embodies the darkness of the void."]
-]);
-
-enhanceBox(gaia, [chaos], [
-  [uranus, "Worked with Uranus to create the first generations of Titans and orchestrated his downfall when he imprisoned their children."],
-  [tartarus, "Conspired with Tartarus to imprison the giants and other rebellious beings."]
-]);
-
-enhanceBox(uranus, [gaia], [
-  [cronus, "Was overthrown and castrated by his son Cronus, fulfilling a prophecy foretold by Gaia."]
-]);
-
-enhanceBox(cronus, [uranus, gaia], [
-  [zeus, "Was defeated by Zeus in the Titanomachy, the great war between the Titans and the Olympian gods."],
-  [rhea, "Tricked by Rhea into swallowing a stone instead of Zeus, which led to his eventual downfall."]
-]);
-
-enhanceBox(rhea, [uranus, gaia], [
-  [zeus, "Saved Zeus from being swallowed by Cronus by hiding him on Crete and later helped him overthrow Cronus."]
-]);
-
-enhanceBox(nyx, [chaos], [
-  [erebus, "Together with Erebus, she gave birth to many deities representing cosmic forces, such as Hypnos and Thanatos."],
-  [zeus, "Even Zeus, the king of the gods, feared her immense power and mystery."]
-]);
-
-enhanceBox(erebus, [chaos], [
-  [nyx, "Partnered with Nyx to produce deities of sleep, death, and other abstract forces."]
-]);
-
-enhanceBox(tartarus, [chaos], [
-  [zeus, "Provided a prison for Zeus to imprison the defeated Titans after the Titanomachy."]
-]);
-
-enhanceBox(pontus, [gaia], [
-  [nereus, "Fathered Nereus, the wise 'Old Man of the Sea,' known for his truthfulness and prophetic abilities."]
-]);
-
-enhanceBox(zeus, [cronus, rhea], [
-  [hera, "Married to Hera, but their relationship was marked by conflict due to his many affairs."],
-  [cronus, "Led the Olympians in the Titanomachy to overthrow Cronus and the Titans."],
-  [tartarus, "Imprisoned the Titans in Tartarus after his victory."]
-]);
-
-enhanceBox(hera, [cronus, rhea], [
-  [zeus, "Wife of Zeus, frequently punishes his lovers and their offspring out of jealousy."],
-  [heracles, "Tormented Heracles throughout his life because he was a son of Zeus and a mortal woman."],
-  [paris, "Instigated the Trojan War by seeking revenge on Paris for not naming her the fairest goddess."]
-]);
-
-enhanceBox(poseidon, [cronus, rhea], [
-  [athena, "Competed with Athena for the patronage of Athens, losing when she offered the olive tree."],
-  [odysseus, "Punished Odysseus by making his journey home arduous after the hero blinded his son, the Cyclops Polyphemus."],
-  [apollo, "Worked with Apollo to build the walls of Troy, later seeking revenge when they were not paid for their labor."]
-]);
-
-enhanceBox(hades, [cronus, rhea], [
-  [persephone, "Abducted Persephone to be his queen, leading to the creation of the seasons."],
-  [heracles, "Allowed Heracles to borrow his watchdog Cerberus as part of the hero's Twelve Labors."],
-  [orpheus, "Made a rare concession by allowing Orpheus to try to rescue his wife Eurydice from the underworld."]
-]);
-
-enhanceBox(athena, [zeus], [
-  [poseidon, "Defeated Poseidon in a contest to become the patron of Athens by offering the olive tree."],
-  [odysseus, "Guided and protected Odysseus during his long journey home from the Trojan War."],
-  [arachne, "Turned the mortal Arachne into a spider for her hubris in a weaving contest."]
-]);
-
-enhanceBox(aphrodite, [zeus], [
-  [ares, "Had a long-standing affair with Ares, the god of war, despite being married to Hephaestus."],
-  [paris, "Influenced Paris to choose her as the fairest goddess by promising him Helen, leading to the Trojan War."],
-  [pygmalion, "Brought the statue crafted by Pygmalion to life as the woman Galatea."]
-]);
-
-enhanceBox(heracles, [zeus], [
-  [hera, "Suffered relentless persecution from Hera, who sought to destroy him."],
-  [cerberus, "Captured Cerberus, the three-headed guard dog of the underworld, as one of his Twelve Labors."],
-  [eurystheus, "Served King Eurystheus, who assigned him the Twelve Labors as penance."]
-]);
-
-// enhanceBox(achilles, [nereus], [
-//   [patroclus, "Fought alongside his close companion Patroclus, whose death spurred his rage."],
-//   [hector, "Killed Hector in revenge for Patroclus's death and desecrated his body."],
-//   [agamemnon, "Quarreled with Agamemnon over the prize Briseis, leading to his temporary withdrawal from battle."]
-// ]);
-
-enhanceBox(odysseus, [zeus], [
-  [poseidon, "Angered Poseidon by blinding his son Polyphemus, causing a long and arduous journey home."],
-  [athena, "Protected and guided by Athena, who admired his cleverness."],
-  [circe, "Spent a year with the enchantress Circe, who initially turned his men into swine."]
-]);
-
-enhanceBox(nereus, [pontus, gaia], [
-  [heracles, "Assisted Heracles by revealing the location of the golden apples of the Hesperides."]
-]);
-
-enhanceBox(circe, [zeus], [
-  [odysseus, "Turned Odysseus's men into swine, though later helped them on their journey."]
-]);
-
-enhanceBox(apollo, [zeus], [
-  [daphne, "Chased after the nymph Daphne, who transformed into a laurel tree to escape him."],
-  [asclepius, "Fathered Asclepius, the god of medicine, who could even raise the dead."]
-]);
-enhanceBox(ares, [zeus, hera], [
-  [aphrodite, "Had an affair with Aphrodite, despite her marriage to Hephaestus."]
-]);
-
-
-// helpers
-// enhanceBox(alcmene, [null],[[]]);
-// enhanceBox(peleus, [null],[[]]);
-// enhanceBox(thetis, [null],[[]]);
-// enhanceBox(laertes, [null],[[]]);
-// enhanceBox(anticleia, [null],[[]]);
-// enhanceBox(helios, [null],[[]]);
-// enhanceBox(leto, [null],[[]]);
-
-enhanceBox(paris, [null],[[]]);
-enhanceBox(persephone, [null],[[]]);
-enhanceBox(orpheus, [null],[[]]);
-enhanceBox(arachne, [null],[[]]);
-enhanceBox(pygmalion, [null],[[]]);
-enhanceBox(cerberus, [null],[[]]);
-enhanceBox(eurystheus, [null],[[]]);
-enhanceBox(patroclus, [null],[[]]);
-enhanceBox(hector, [null],[[]]);
-enhanceBox(agamemnon, [null],[[]]);
-enhanceBox(daphne, [null],[[]]);
-enhanceBox(asclepius, [null],[[]]);
-
-//new helpers
-enhanceBox(narcissus, [null],[[]]);
-enhanceBox(hydra, [null],[[]]);
-enhanceBox(helios, [null],[[]]);
-enhanceBox(eos, [null],[[]]);
-// enhanceBox(hyperion, [null],[[]]);
-enhanceBox(chimera, [null],[[]]);
-
-
-//news
-
-// Enhanced Relationships
-enhanceBox(typhon, [gaia], [
-  [echidna, "Partnered with Echidna to sire many fearsome monsters, including Cerberus and the Chimera."],
-  [zeus, "Fought Zeus in a fierce battle for control of the cosmos, ultimately defeated and trapped beneath Mount Etna."]
-]);
-
-enhanceBox(echidna, [typhon], [
-  [cerberus, "Mothered Cerberus, the multi-headed guardian of the underworld."],
-  [chimera, "Gave birth to Chimera, a terrifying hybrid creature."]
-]);
-
-enhanceBox(hecate, [zeus], [
-  //[selene, "Often collaborated with Selene during rituals under the moon."],
-  [persephone, "Assisted Persephone during her time in the underworld."]
-]);
-
-// enhanceBox(selene, [hyperion], [
-//   [helios, "Sibling relationship with Helios, balancing the celestial cycle of day and night."],
-//   [eos, "Collaborates with Eos to maintain the transition between night and dawn."]
-// ]);
-
-enhanceBox(nemesis, [zeus], [
-  [ares, "Worked alongside Ares to punish hubris and enforce divine justice."],
-  [narcissus, "Punished Narcissus for his vanity by causing him to fall in love with his reflection."]
-]);
 
 
 
@@ -2083,29 +1683,8 @@ enhanceBox(nemesis, [zeus], [
 
 
 
-//console.log(paris)
-//let notstructureBoxes = boxes.filter(box => (box.userData.children.length < 0 && box.userData.parents.length < 0))
 
 
-
-// enhanceBox(paris, [chaos],[[]]);
-// enhanceBox(persephone, [chaos],[[]]);
-// enhanceBox(orpheus, [chaos],[[]]);
-// enhanceBox(arachne, [chaos],[[]]);
-// enhanceBox(pygmalion, [chaos],[[]]);
-// enhanceBox(cerberus, [chaos],[[]]);
-// enhanceBox(eurystheus, [chaos],[[]]);
-// enhanceBox(patroclus, [chaos],[[]]);
-// enhanceBox(hector, [chaos],[[]]);
-// enhanceBox(agamemnon, [chaos],[[]]);
-// enhanceBox(daphne, [chaos],[[]]);
-// enhanceBox(asclepius, [chaos],[[]]);
-
-
-
-// // for (let i = 0; i < 20; i++) {
-// //   createBox(zE, child0110, white);
-// // }
 
 setTimeout(() => {
   
