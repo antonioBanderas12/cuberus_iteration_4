@@ -10,7 +10,10 @@ import { Group, TextureLoader } from 'three';
 import { TextGeometry } from 'three/examples/jsm/geometries/TextGeometry';
 import { FontLoader } from 'three/examples/jsm/loaders/FontLoader';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry';
+//import { TfIdf } from 'natural';
+// import PCA from 'pca-js';
 
+import { PCA } from 'ml-pca';  // Named import
 
 document.addEventListener('DOMContentLoaded', function() {
 
@@ -43,6 +46,7 @@ document.addEventListener('DOMContentLoaded', function() {
   let structure = 0;
   let relations = 1;
   let themes = 2;
+  let latent = 3;
 
   let mode = structure;
   let explore = false;
@@ -269,6 +273,23 @@ document.getElementById('themes').addEventListener('click', () => {
   changeMode()
   });
 
+
+document.getElementById('latent').addEventListener('click', () => {
+  latentPos();
+  mode = latent;
+  changeMode()
+  });
+  
+
+
+
+
+
+
+
+
+
+
   //hellohello
 
 
@@ -491,6 +512,10 @@ function manNavigation() {
     if (mode === themes && !explore) {
       camera.position.z -= event.deltaY * 0.1; 
     }
+
+    if (mode === latent && !explore) {
+      camera.position.x += event.deltaY * 0.1; 
+    }
   });
   
   canvas.addEventListener('mousedown', (event) => {
@@ -506,6 +531,12 @@ function manNavigation() {
       prevMousePosition.y = event.clientY;
     }
     if (mode === themes && !explore) {
+      isDragging = true;
+      prevMousePosition.x = event.clientX;
+      prevMousePosition.y = event.clientY;
+    }
+
+    if (mode === latent && !explore) {
       isDragging = true;
       prevMousePosition.x = event.clientX;
       prevMousePosition.y = event.clientY;
@@ -552,6 +583,22 @@ function manNavigation() {
       prevMousePosition.x = event.clientX;
       prevMousePosition.y = event.clientY;
     }
+
+    if (mode === latent && !explore && isDragging) {
+      const deltaX = (event.clientX - prevMousePosition.x) * 0.1; // Adjust drag sensitivity
+      const deltaY = (event.clientY - prevMousePosition.y) * 0.1;
+  
+      // Since the plane is rotated, modify the camera's z and y positions
+      camera.position.z += deltaX;
+      camera.position.y += deltaY;
+  
+      // Update previous mouse position
+      prevMousePosition.x = event.clientX;
+      prevMousePosition.y = event.clientY;
+    }
+
+
+
   });
   
   canvas.addEventListener('mouseup', () => {
@@ -560,6 +607,9 @@ function manNavigation() {
     if (mode === relations && !explore) isDragging = false;
 
     if (mode === themes && !explore) isDragging = false;
+
+    if (mode === latent && !explore) isDragging = false;
+
 
   });
   
@@ -570,6 +620,9 @@ function manNavigation() {
 
 
     if (mode === themes && !explore) isDragging = false;
+
+    if (mode === latent && !explore) isDragging = false;
+
 
   });
 };
@@ -613,6 +666,17 @@ function changeMode() {
 
     targetPosition.z -= bigCubeSize;
     rot.set(0, Math.PI, 0);
+
+    boxes.forEach(box => easeInBoxes(box));
+    boxes.filter(box => box.userData.status === "helperElement" ).forEach(box => box.visible = false); //&& box.userData.group !== "extraElement"
+    manNavigation();
+
+  }
+
+  if (mode === latent) {
+
+    targetPosition.x += bigCubeSize;
+    rot.set(0, Math.PI / 2, 0);
 
     boxes.forEach(box => easeInBoxes(box));
     boxes.filter(box => box.userData.status === "helperElement" ).forEach(box => box.visible = false); //&& box.userData.group !== "extraElement"
@@ -1126,7 +1190,6 @@ boxes.forEach(cube => {
 
 
 
-//relations
 function relationsPos() {
   setTimeout(() => {
     // Rotate cubes
@@ -1135,91 +1198,51 @@ function relationsPos() {
       cube.userData.boundBox.rotation.set(0, -(Math.PI / 2), 0);
     });
 
-    const minDistance = 30;     // Minimum distance between cubes to avoid overlap
-    const maxAttempts = 100;    // Max retries to find a non-overlapping position
-    const relationForce = 50;   // Force to pull related cubes closer
-    const repulsionForce = 10;  // Force to push unrelated cubes apart
 
-    let planeWidth = bigCubeSize;
-    let planeHeight = bigCubeSize;
-    const leftFaceX = -bigCubeSize / 2;
 
-    const placedPositions = [];
 
-    // Helper function to check for collisions
-    function checkCollision(pos) {
-      return placedPositions.some(placedPos => {
-        const dx = pos.y - placedPos.y;
-        const dy = pos.z - placedPos.z;
-        return Math.sqrt(dx * dx + dy * dy) < minDistance;
-      });
-    }
+    let corpus = boxes.map(box => {
+      let allWords = [];
+      
+      if (box.userData.relations) {
+        box.userData.relations.forEach(([rel, description]) => {
+          allWords = [...allWords, ...description.split(" ")];
+        });
+      }
+      return allWords.filter(Boolean); // Remove empty entries
+    });
+    
 
-    // Helper function to calculate forces
-    function calculateForces(cube, pos) {
-      let forceY = 0, forceZ = 0;
-      boxes.forEach(otherCube => {
-        if (cube !== otherCube) {
-          const dy = pos.y - otherCube.position.y;
-          const dz = pos.z - otherCube.position.z;
-          const distance = Math.sqrt(dy * dy + dz * dz);
-          const force = cube.userData.relations.includes(otherCube.userData.id) ? relationForce : -repulsionForce;
-          forceY += (dy / distance) * force;
-          forceZ += (dz / distance) * force;
-        }
-      });
-      return { forceY, forceZ };
-    }
 
-    // Position cubes
+    let pcaPositions = pcaText(corpus);
+
+    pcaPositions.forEach(pos => {
+      pos.x = pos.x * 1.5;
+      pos.y = pos.y * 1.5;
+    })
+
+    let finalPositions = adjustPos(pcaPositions, "relations");
+    let face = - (bigCubeSize / 2);
+
     boxes.forEach(cube => {
-      let validPosition = false;
-      let attempts = 0;
-      let pos = { x: leftFaceX, y: 0, z: 0 };
-
-      while (!validPosition && attempts < maxAttempts) {
-        const { forceY, forceZ } = calculateForces(cube, pos);
-        pos.y += forceY * 0.1;
-        pos.z += forceZ * 0.1;
-
-        // Keep within expanded plane
-        pos.y = Math.max(-planeHeight/2, Math.min(planeHeight/2, pos.y));
-        pos.z = Math.max(-planeWidth/2, Math.min(planeWidth/2, pos.z));
-
-        if (!checkCollision(pos)) {
-          validPosition = true;
-        } else {
-          attempts++;
-        }
-      }
-
-      if (!validPosition) {
-        // Expand plane if needed
-        planeWidth += 10;
-        planeHeight += 10;
-        pos.y = (Math.random() - 0.5) * planeHeight;
-        pos.z = (Math.random() - 0.5) * planeWidth;
-      }
-
-      placedPositions.push(pos);
-
-      gsap.to(cube.position, {
-        duration: 1,
-        x: pos.x,
-        y: pos.y,
-        z: pos.z,
-        ease: "power2.inOut",
-        onUpdate: () => {
-          cube.userData.boundBox.position.copy(cube.position);
+      finalPositions.forEach((pos, index) => {
+        if (cube.userData.name === pos.boxName) {
+            gsap.to(cube.position, {
+              duration: 1,
+              x: face,
+              y: pos.y,
+              z: pos.x,
+              ease: "power2.inOut",
+              onUpdate: () => {
+                cube.userData.boundBox.position.copy(cube.position);
+              }
+            });
         }
       });
     });
+
   }, 500);
 }
-
-
-
-
 
 
 
@@ -1388,6 +1411,331 @@ function themesPos() {
     updateBoundingBoxes();
   }, 500);
 }
+
+
+
+// function latentPos() {
+
+//   boxes.forEach(cube => {
+//     cube.rotation.set(0, Math.PI / 2, 0);
+//     cube.userData.boundBox.rotation.set(0, Math.PI, 0);
+//   });
+
+
+
+
+
+
+
+//   // Step 1: Convert Descriptions to Vectors Using TF-IDF
+//   const corpus = boxes.map(box => box.userData.description.split(" "));  
+
+
+
+
+
+
+
+
+//   // Compute the TF-IDF for the corpus
+//   const tfidfVectors = computeTFIDF(corpus);
+
+//   // Find the maximum length of the TF-IDF vectors
+//   const maxLength = Math.max(...tfidfVectors.map(doc => Object.keys(doc).length));
+
+//   // Step 2: Map TF-IDF vectors and pad them to ensure consistent length
+//   let vectors = tfidfVectors.map(doc => {
+//     const vector = Object.values(doc);  
+//     while (vector.length < maxLength) {
+//       vector.push(0);  
+//     }
+//     return vector;
+//   });
+
+//   // Step 3: Use ml-pca to reduce dimensions (2D in this case)
+//   const pca = new PCA(vectors);
+//   const reducedVectors = pca.predict(vectors);
+
+//   // Define a better normalize function
+//   function normalize(value, min, max, rangeMin, rangeMax) {
+//     if (max - min === 0) return (rangeMin + rangeMax) / 2; // Avoid division by zero
+//     return rangeMin + ((value - min) / (max - min)) * (rangeMax - rangeMin);
+//   }
+
+//   // Step 4: Calculate the min and max values for x and y axes from the reduced vectors
+//   const minX = Math.min(...reducedVectors.data.map(v => v[0]));
+//   const maxX = Math.max(...reducedVectors.data.map(v => v[0]));
+//   const minY = Math.min(...reducedVectors.data.map(v => v[1]));
+//   const maxY = Math.max(...reducedVectors.data.map(v => v[1]));
+
+//   console.log(`minX: ${minX}, maxX: ${maxX}, minY: ${minY}, maxY: ${maxY}`);
+
+//   // Step 5: Normalize and map the reduced vectors to positions
+//   let positions = reducedVectors.data.map((v, index) => ({
+//     boxName: boxes[index].userData.name,
+//     x: bigCubeSize / 2, // Right face of the cube
+//     y: normalize(v[1], minY, maxY, -bigCubeSize / 2, bigCubeSize / 2), // Spread vertically
+//     z: normalize(v[0], minX, maxX, -bigCubeSize / 0.2, bigCubeSize / 0.2) + 700// More spread across width
+//   }));
+
+//   console.log(positions);
+
+
+
+
+function latentPos() {
+  setTimeout(() => {
+    
+  
+  boxes.forEach(cube => {
+    cube.rotation.set(0, Math.PI / 2, 0);
+    cube.userData.boundBox.rotation.set(0, Math.PI, 0);
+  });
+
+
+  let corpus = boxes.map(box => {
+    let allWords = [
+      ...box.userData.description.split(" "),];
+    
+    if (box.userData.relations) {
+      box.userData.relations.forEach(([rel, description]) => {
+        allWords = [...allWords, ...description.split(" ")];
+      });
+    }
+    return allWords.filter(Boolean); // Remove empty entries
+  });
+
+
+
+  let pcaPositions = pcaText(corpus);
+
+  pcaPositions.forEach(pos => {
+    pos.x = pos.x * 1.5;
+    pos.y = pos.y * 1.5;
+  })
+
+  let relPositions = adjustPos(pcaPositions, "relations");
+  let parentsPositions = adjustPos(relPositions, "parents");
+  let finalPositions = adjustPos(parentsPositions, "children");
+
+
+  let face = - (bigCubeSize / 2);
+
+  boxes.forEach(cube => {
+    finalPositions.forEach((pos, index) => {
+      if (cube.userData.name === pos.boxName) {
+          gsap.to(cube.position, {
+            duration: 1,
+            x: face,
+            y: pos.y,
+            z: pos.x,
+            ease: "power2.inOut",
+            onUpdate: () => {
+              cube.userData.boundBox.position.copy(cube.position);
+            }
+          });
+      }
+    });
+  });
+
+}, 500);
+}
+
+
+
+//pca computation
+
+function computeTF(doc) {
+  const tf = {};
+  const docLength = doc.length;
+  doc.forEach(word => {
+      tf[word] = (tf[word] || 0) + 1;
+  });
+
+  for (let word in tf) {
+      tf[word] /= docLength;
+  }
+
+  return tf;
+}
+
+function computeIDF(corpus) {
+  const idf = {};
+  const docCount = corpus.length;
+
+  corpus.forEach(doc => {
+      const uniqueWords = new Set(doc);
+      uniqueWords.forEach(word => {
+          idf[word] = (idf[word] || 0) + 1;
+      });
+  });
+
+  for (let word in idf) {
+      idf[word] = Math.log(docCount / idf[word]);
+  }
+
+  return idf;
+}
+
+function computeTFIDF(corpus) {
+  const idf = computeIDF(corpus);
+  return corpus.map(doc => {
+      const tf = computeTF(doc);
+      const tfidf = {};
+
+      for (let word in tf) {
+          tfidf[word] = tf[word] * idf[word] || 0;
+      }
+
+      return tfidf;
+  });
+}
+
+// pca for text
+function pcaText(corpus) {
+  const tfidfVectors = computeTFIDF(corpus);
+  const maxLength = Math.max(...tfidfVectors.map(doc => Object.keys(doc).length));
+
+  let vectors = tfidfVectors.map(doc => {
+    const vector = Object.values(doc);
+    while (vector.length < maxLength) {
+      vector.push(0);
+    }
+    return vector;
+  });
+
+  const pca = new PCA(vectors);
+  const reducedVectors = pca.predict(vectors);
+
+  const minX = Math.min(...reducedVectors.data.map(v => v[0]));
+  const maxX = Math.max(...reducedVectors.data.map(v => v[0]));
+  const minY = Math.min(...reducedVectors.data.map(v => v[1]));
+  const maxY = Math.max(...reducedVectors.data.map(v => v[1]));
+
+  let positions = reducedVectors.data.map((v, index) => ({
+    boxName: boxes[index].userData.name,
+    x: normalize(v[0], minX, maxX, -bigCubeSize / 2, bigCubeSize / 2),
+    y: normalize(v[1], minY, maxY, -bigCubeSize / 2, bigCubeSize / 2),
+    z: 0 // 2D projection, so z is 0
+  }));
+
+  return positions;
+}
+
+
+
+
+//reference adjustments
+function adjustPos(initialPositions, reference, iterations = 50, attractionStrength = 0.5, repulsionStrength = 0.3, minDistance = 20) {
+  let positions = initialPositions.map(pos => ({ ...pos })); // Deep copy
+
+  for (let i = 0; i < iterations; i++) {
+      let totalMovement = 0;
+
+      positions.forEach((pos, index) => {
+          let box = boxes.find(b => b.userData.name === pos.boxName);
+          if (!box || !box.userData.relations) return;
+
+          let forceX = 0, forceY = 0;
+
+
+      if (reference === "parents") {
+        box.userData.parents.forEach((parent) => {
+          let relatedPos = positions.find(p => p.boxName === parent.userData.name);
+          if (relatedPos) {
+              let dx = relatedPos.x - pos.x;
+              let dy = relatedPos.y - pos.y;
+              let distance = Math.sqrt(dx * dx + dy * dy);
+              
+              // Apply attraction force
+              forceX += (dx / distance) * attractionStrength;
+              forceY += (dy / distance) * attractionStrength;
+          }
+      });
+      }else if (reference === "relations") {
+
+
+          // Attraction forces
+          box.userData.relations.forEach(([relatedItem, _]) => {
+              let relatedPos = positions.find(p => p.boxName === relatedItem.userData.name);
+              if (relatedPos) {
+                  let dx = relatedPos.x - pos.x;
+                  let dy = relatedPos.y - pos.y;
+                  let distance = Math.sqrt(dx * dx + dy * dy);
+                  
+                  // Apply attraction force
+                  forceX += (dx / distance) * attractionStrength;
+                  forceY += (dy / distance) * attractionStrength;
+              }
+          });
+
+        }else if (reference === "children") {
+          box.userData.children.forEach((parent) => {
+            let relatedPos = positions.find(p => p.boxName === parent.userData.name);
+            if (relatedPos) {
+                let dx = relatedPos.x - pos.x;
+                let dy = relatedPos.y - pos.y;
+                let distance = Math.sqrt(dx * dx + dy * dy);
+                
+                // Apply attraction force
+                forceX += (dx / distance) * attractionStrength;
+                forceY += (dy / distance) * attractionStrength;
+                console.log("children")
+            }
+        });
+      }
+  
+
+
+          // Repulsion forces
+          positions.forEach((otherPos, otherIndex) => {
+              if (index !== otherIndex) {
+                  let dx = otherPos.x - pos.x;
+                  let dy = otherPos.y - pos.y;
+                  let distance = Math.sqrt(dx * dx + dy * dy);
+
+                  if (distance < minDistance) {
+                      // Apply repulsion force
+                      let repulsionForce = repulsionStrength * (minDistance - distance) / distance;
+                      forceX -= dx * repulsionForce;
+                      forceY -= dy * repulsionForce;
+                  }
+              }
+          });
+
+          // Update position
+          pos.x += forceX;
+          pos.y += forceY;
+          totalMovement += Math.abs(forceX) + Math.abs(forceY);
+      });
+
+      if (totalMovement < 0.001) break; // Stop if movement is very small
+  }
+
+  return positions;
+}
+  function normalize(value, min, max, rangeMin, rangeMax) {
+    if (max - min === 0) return (rangeMin + rangeMax) / 2; // Avoid division by zero
+    return rangeMin + ((value - min) / (max - min)) * (rangeMax - rangeMin);
+  }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 function updateBoundingBoxes() {
   const statusClusters = {};
