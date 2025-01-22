@@ -1221,7 +1221,12 @@ function relationsPos() {
       pos.y = pos.y * 1.5;
     })
 
-    let finalPositions = adjustPos(pcaPositions, "relations");
+    let adjustedPositions = adjustPos(pcaPositions, "relations");
+
+    let finalPositions = overlapPrevention(adjustedPositions);
+
+
+
     let face = - (bigCubeSize / 2);
 
     boxes.forEach(cube => {
@@ -1414,75 +1419,6 @@ function themesPos() {
 
 
 
-// function latentPos() {
-
-//   boxes.forEach(cube => {
-//     cube.rotation.set(0, Math.PI / 2, 0);
-//     cube.userData.boundBox.rotation.set(0, Math.PI, 0);
-//   });
-
-
-
-
-
-
-
-//   // Step 1: Convert Descriptions to Vectors Using TF-IDF
-//   const corpus = boxes.map(box => box.userData.description.split(" "));  
-
-
-
-
-
-
-
-
-//   // Compute the TF-IDF for the corpus
-//   const tfidfVectors = computeTFIDF(corpus);
-
-//   // Find the maximum length of the TF-IDF vectors
-//   const maxLength = Math.max(...tfidfVectors.map(doc => Object.keys(doc).length));
-
-//   // Step 2: Map TF-IDF vectors and pad them to ensure consistent length
-//   let vectors = tfidfVectors.map(doc => {
-//     const vector = Object.values(doc);  
-//     while (vector.length < maxLength) {
-//       vector.push(0);  
-//     }
-//     return vector;
-//   });
-
-//   // Step 3: Use ml-pca to reduce dimensions (2D in this case)
-//   const pca = new PCA(vectors);
-//   const reducedVectors = pca.predict(vectors);
-
-//   // Define a better normalize function
-//   function normalize(value, min, max, rangeMin, rangeMax) {
-//     if (max - min === 0) return (rangeMin + rangeMax) / 2; // Avoid division by zero
-//     return rangeMin + ((value - min) / (max - min)) * (rangeMax - rangeMin);
-//   }
-
-//   // Step 4: Calculate the min and max values for x and y axes from the reduced vectors
-//   const minX = Math.min(...reducedVectors.data.map(v => v[0]));
-//   const maxX = Math.max(...reducedVectors.data.map(v => v[0]));
-//   const minY = Math.min(...reducedVectors.data.map(v => v[1]));
-//   const maxY = Math.max(...reducedVectors.data.map(v => v[1]));
-
-//   console.log(`minX: ${minX}, maxX: ${maxX}, minY: ${minY}, maxY: ${maxY}`);
-
-//   // Step 5: Normalize and map the reduced vectors to positions
-//   let positions = reducedVectors.data.map((v, index) => ({
-//     boxName: boxes[index].userData.name,
-//     x: bigCubeSize / 2, // Right face of the cube
-//     y: normalize(v[1], minY, maxY, -bigCubeSize / 2, bigCubeSize / 2), // Spread vertically
-//     z: normalize(v[0], minX, maxX, -bigCubeSize / 0.2, bigCubeSize / 0.2) + 700// More spread across width
-//   }));
-
-//   console.log(positions);
-
-
-
-
 function latentPos() {
   setTimeout(() => {
     
@@ -1516,10 +1452,18 @@ function latentPos() {
 
   let relPositions = adjustPos(pcaPositions, "relations");
   let parentsPositions = adjustPos(relPositions, "parents");
-  let finalPositions = adjustPos(parentsPositions, "children");
+ // let childrenPositions = adjustPos(parentsPositions, "children");
 
 
-  let face = - (bigCubeSize / 2);
+
+
+  let finalPositions = overlapPrevention(parentsPositions);
+
+  console.log(finalPositions);
+
+
+
+  let face = bigCubeSize / 2;
 
   boxes.forEach(cube => {
     finalPositions.forEach((pos, index) => {
@@ -1538,9 +1482,10 @@ function latentPos() {
     });
   });
 
+
+
 }, 500);
 }
-
 
 
 //pca computation
@@ -1623,10 +1568,9 @@ function pcaText(corpus) {
 }
 
 
-
-
-//reference adjustments
-function adjustPos(initialPositions, reference, iterations = 50, attractionStrength = 0.5, repulsionStrength = 0.3, minDistance = 20) {
+//adjustments
+function adjustPos(initialPositions, reference, iterations = 50, attractionStrength = 0.1) {
+  
   let positions = initialPositions.map(pos => ({ ...pos })); // Deep copy
 
   for (let i = 0; i < iterations; i++) {
@@ -1680,28 +1624,10 @@ function adjustPos(initialPositions, reference, iterations = 50, attractionStren
                 // Apply attraction force
                 forceX += (dx / distance) * attractionStrength;
                 forceY += (dy / distance) * attractionStrength;
-                console.log("children")
             }
         });
       }
   
-
-
-          // Repulsion forces
-          positions.forEach((otherPos, otherIndex) => {
-              if (index !== otherIndex) {
-                  let dx = otherPos.x - pos.x;
-                  let dy = otherPos.y - pos.y;
-                  let distance = Math.sqrt(dx * dx + dy * dy);
-
-                  if (distance < minDistance) {
-                      // Apply repulsion force
-                      let repulsionForce = repulsionStrength * (minDistance - distance) / distance;
-                      forceX -= dx * repulsionForce;
-                      forceY -= dy * repulsionForce;
-                  }
-              }
-          });
 
           // Update position
           pos.x += forceX;
@@ -1714,14 +1640,82 @@ function adjustPos(initialPositions, reference, iterations = 50, attractionStren
 
   return positions;
 }
-  function normalize(value, min, max, rangeMin, rangeMax) {
-    if (max - min === 0) return (rangeMin + rangeMax) / 2; // Avoid division by zero
-    return rangeMin + ((value - min) / (max - min)) * (rangeMax - rangeMin);
+
+
+//overlapping
+function overlapPrevention(initialPositions, iterations = 50, repulsionStrength = 0.2, minDistance = 30) {
+  let finalPositions = initialPositions.map(pos => ({ ...pos })); // Deep copy
+  
+  // Calculate the bounding box sizes for all boxes once, outside the loop
+  const boxSizes = finalPositions.map(pos => {
+    let box = boxes.find(b => b.userData.name === pos.boxName);
+    if (box && box.userData.boundBox) {
+      const textBoundingBox = new THREE.Box3().setFromObject(box);
+      const size = new THREE.Vector3();
+      textBoundingBox.getSize(size);  // Get the size of the bounding box
+      return size;  // Return the bounding box size
+    }
+    return null; // Handle the case where no box is found
+  });
+
+  // Loop through iterations to apply repulsion forces
+  for (let i = 0; i < iterations; i++) {
+    let totalMovement = 0;
+
+    finalPositions.forEach((pos, index) => {
+      let box = boxes.find(b => b.userData.name === pos.boxName);
+      if (!box || !box.userData.boundBox) return;
+
+      let forceX = 0, forceY = 0;
+
+      finalPositions.forEach((otherPos, otherIndex) => {
+        if (index !== otherIndex) {
+          // Get the box size for the other position
+          const otherBoxSize = boxSizes[otherIndex];
+          if (!otherBoxSize) return; // Skip if no valid box size
+
+          let dx = otherPos.x - pos.x;
+          let dy = otherPos.y - pos.y;
+
+          // Calculate the actual distance between boxes
+          const distance = Math.sqrt(dx * dx + dy * dy);
+
+          // Calculate the threshold based on the bounding box sizes in both x and y directions
+          const thresholdX = (boxSizes[index].x + otherBoxSize.x) / 2; // Average width of both boxes
+          const thresholdY = (boxSizes[index].y + otherBoxSize.y) / 2; // Average height of both boxes
+
+          // If the distance in either x or y direction is smaller than the threshold, apply repulsion
+          if (Math.abs(dx) < thresholdX || Math.abs(dy) < thresholdY) {
+            // Calculate repulsion force proportionally based on the distance
+            let repulsionForceX = repulsionStrength * (thresholdX - Math.abs(dx)) / (Math.abs(dx) + 0.001); // Prevent division by zero
+            let repulsionForceY = repulsionStrength * (thresholdY - Math.abs(dy)) / (Math.abs(dy) + 0.001); // Prevent division by zero
+
+            // Apply the forces
+            forceX += repulsionForceX * (dx / Math.abs(dx)); // Apply force in the direction of dx
+            forceY += repulsionForceY * (dy / Math.abs(dy)); // Apply force in the direction of dy
+          }
+        }
+      });
+
+      // Update position
+      pos.x += forceX;
+      pos.y += forceY;
+
+      // Calculate total movement for breaking the loop if movement is small
+      totalMovement += Math.abs(forceX) + Math.abs(forceY);
+    });
+
+    // Stop if movement is very small (to prevent redundant iterations)
+    if (totalMovement < 0.001) break;
   }
 
+  return finalPositions;
+}
 
-
-
+function normalize(value, min, max, rangeMin, rangeMax) {
+  if (max - min === 0) return (rangeMin + rangeMax) / 2; // Avoid division by zero
+  return rangeMin + ((value - min) / (max - min)) * (rangeMax - rangeMin);
+}
 
 
 
