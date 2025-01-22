@@ -47,6 +47,7 @@ document.addEventListener('DOMContentLoaded', function() {
   let relations = 1;
   let themes = 2;
   let latent = 3;
+  let sequence = 4;
 
   let mode = structure;
   let explore = false;
@@ -124,6 +125,7 @@ function createBox(name, description, status) {
   cube.userData.boundBox = null;
   cube.userData.colour = colour;
   cube.userData.statusline = null;
+  cube.userData.sequence = [];
 
   boxes.push(cube);
   return cube;
@@ -133,7 +135,7 @@ function createBox(name, description, status) {
 
 
 // enhanceBox
-function enhanceBox(name, parentes = [], relations = [[]]) {
+function enhanceBox(name, parentes = [], relations = [[]], sequence = []) {
   let cube = boxes.find(box => box === name);
 
   //text
@@ -232,6 +234,15 @@ function enhanceBox(name, parentes = [], relations = [[]]) {
   }
 
 
+  //sequence
+  sequence = sequence ? (Array.isArray(sequence) ? sequence : [sequence]) : [];
+  sequence.forEach(seq => {
+    cube.userData.sequence = sequence;
+});
+
+
+
+
   //adding
   scene.add(cube);
   return cube;
@@ -279,6 +290,14 @@ document.getElementById('latent').addEventListener('click', () => {
   mode = latent;
   changeMode()
   });
+
+
+  document.getElementById('sequence').addEventListener('click', () => {
+    sequencePos();
+    mode = sequence;
+    changeMode()
+    });
+    
   
 
 
@@ -329,6 +348,7 @@ function onMouseMove(event) {
 
 
 function onHover(cube) {
+  console.log(mode);
   if (cube && cube.visible) {
    if (mode === structure) {
      createOutline(cube);
@@ -445,6 +465,34 @@ function onHover(cube) {
       textContainer.style.display = 'block'; // Ensure it's visible
     }
   }
+
+
+  if(mode === sequence) {
+
+    createOutline(cube);
+    cube.material.color.set(black);
+
+
+   cube.userData.sequence?.forEach((entity) => {
+    console.log("hello")
+
+     if (entity) {
+       createOutline(entity);
+       entity.material.color.set(black);
+       createLine(cube, entity);
+     }
+
+    boxes.forEach(child => {
+      if(child.userData.sequence.includes(cube)){
+        createOutline(child);
+        child.material.color.set(black);
+        createLine(cube, child);
+      }
+    })
+
+   });
+
+ }
   
   
   }
@@ -516,6 +564,16 @@ function manNavigation() {
     if (mode === latent && !explore) {
       camera.position.x += event.deltaY * 0.1; 
     }
+
+    if (mode === sequence && !explore) {
+      camera.position.y += event.deltaY * 0.1; 
+    }
+
+
+
+
+
+
   });
   
   canvas.addEventListener('mousedown', (event) => {
@@ -537,6 +595,12 @@ function manNavigation() {
     }
 
     if (mode === latent && !explore) {
+      isDragging = true;
+      prevMousePosition.x = event.clientX;
+      prevMousePosition.y = event.clientY;
+    }
+
+    if (mode === sequence && !explore) {
       isDragging = true;
       prevMousePosition.x = event.clientX;
       prevMousePosition.y = event.clientY;
@@ -598,6 +662,21 @@ function manNavigation() {
     }
 
 
+    if (mode === sequence && !explore && isDragging) {
+      const deltaX = (event.clientX - prevMousePosition.x) * 0.1; // Adjust drag sensitivity
+      const deltaY = (event.clientY - prevMousePosition.y) * 0.1;
+  
+      // Since the plane is rotated, modify the camera's z and y positions
+      camera.position.x -= deltaX;
+      camera.position.z -= deltaY;
+  
+      // Update previous mouse position
+      prevMousePosition.x = event.clientX;
+      prevMousePosition.y = event.clientY;
+    }
+
+
+
 
   });
   
@@ -609,6 +688,9 @@ function manNavigation() {
     if (mode === themes && !explore) isDragging = false;
 
     if (mode === latent && !explore) isDragging = false;
+
+    if (mode === sequence && !explore) isDragging = false;
+
 
 
   });
@@ -622,6 +704,8 @@ function manNavigation() {
     if (mode === themes && !explore) isDragging = false;
 
     if (mode === latent && !explore) isDragging = false;
+
+    if (mode === sequence && !explore) isDragging = false;
 
 
   });
@@ -677,6 +761,17 @@ function changeMode() {
 
     targetPosition.x += bigCubeSize;
     rot.set(0, Math.PI / 2, 0);
+
+    boxes.forEach(box => easeInBoxes(box));
+    boxes.filter(box => box.userData.status === "helperElement" ).forEach(box => box.visible = false); //&& box.userData.group !== "extraElement"
+    manNavigation();
+
+  }
+
+  if (mode === sequence) {
+
+    targetPosition.y += bigCubeSize;
+    rot.set(-Math.PI / 2, 0, 0);
 
     boxes.forEach(box => easeInBoxes(box));
     boxes.filter(box => box.userData.status === "helperElement" ).forEach(box => box.visible = false); //&& box.userData.group !== "extraElement"
@@ -892,6 +987,12 @@ function createOutline(cube, color = 0xF7E0C0) {
       factorY = size.y;
     } else if (mode === themes) {
       factorX = size.x;
+      factorY = size.y;
+    } else if (mode === latent) {
+      factorX = size.z;
+      factorY = size.y;
+    } else if (mode === sequence) {
+      factorX = size.x;
       factorY = size.z;
     }
 
@@ -922,7 +1023,11 @@ function createOutline(cube, color = 0xF7E0C0) {
       outlineMesh.rotation.set(0, -(Math.PI / 2), 0);
     } else if (mode === themes) {
       outlineMesh.rotation.set(0, -Math.PI, 0);
-    }
+    } else if (mode === latent) {
+      outlineMesh.rotation.set(0, Math.PI / 2, 0);
+    } else if (mode === sequence) {
+    outlineMesh.rotation.set(Math.PI / 2, 0, 0);
+  }
   }
 }
 
@@ -963,6 +1068,30 @@ function removeHover(cube) {
       removeLines(entity);
     }
   });
+
+
+  cube.userData.sequence?.forEach((entity) => {
+    if (entity) {
+      removeOutline(entity);
+      entity.material.color.set(entity.userData.colour);
+      removeLines(entity);
+    }
+
+
+  })
+
+    boxes.forEach(child => {
+      child.userData.sequence?.forEach((entity) => {
+        if(entity.userData.name === cube.userData.name){
+          removeOutline(entity);
+          entity.material.color.set(entity.userData.colour);
+          removeLines(entity);
+        }
+
+      })
+    })
+
+
 
   boxes.filter(child => child.userData.status === cube.userData.status).forEach(element => {
     element.material.color.set(element.userData.colour);
@@ -1487,6 +1616,84 @@ function latentPos() {
 }, 500);
 }
 
+function sequencePos() {
+  setTimeout(() => {
+    // Fix rotations for all boxes
+    boxes.forEach(cube => {
+      cube.rotation.set(-Math.PI / 2, 0, 0);
+      cube.userData.boundBox.rotation.set(-Math.PI / 2, 0, 0);
+    });
+
+    // Get all referenced objects
+    let allSequences = new Set();
+    boxes.forEach(box => {
+      box.userData.sequence.forEach(seq => allSequences.add(seq));
+    });
+
+    // Find starting objects (not referenced in any sequence)
+    let startObjects = boxes.filter(box => !allSequences.has(box));
+
+    // Positioning parameters
+    let xStart = -100;  // Start position X
+    let yFixed = 50;   // Keep Y constant
+    let zStart = 0;    // Keep Z fixed
+    let xSpacing = 30; // Horizontal distance between boxes
+    let rowSpacing = 200; // Space between different start nodes
+
+    let destinationArray = {}; // Store target positions
+    let placed = new Set();    // Track placed boxes
+    let queue = [];            // Queue for BFS-like placement
+
+    // Position start objects in a horizontal row
+    startObjects.forEach((box, index) => {
+      let xPos = xStart + index * rowSpacing;
+      destinationArray[box.userData.name] = { x: xPos, y: yFixed, z: zStart };
+      placed.add(box);
+      queue.push({ box, x: xPos, depth: 0 });
+    });
+
+    // Position subsequent objects
+    while (queue.length > 0) {
+      let { box, x, depth } = queue.shift();
+      let nextX = x; // Align new sequence nodes horizontally
+      let yOffset = (depth + 1) * xSpacing; // Move sequence horizontally
+
+      box.userData.sequence.forEach((nextBox, i) => {
+        if (!placed.has(nextBox)) {
+          let newX = nextX + i * xSpacing; // Staggered horizontally
+          destinationArray[nextBox.userData.name] = { x: newX, y: yFixed, z: zStart };
+          placed.add(nextBox);
+          queue.push({ box: nextBox, x: newX, depth: depth + 1 });
+        }
+      });
+    }
+
+    console.log(destinationArray); // Check if positions are correct
+
+    let face = bigCubeSize / 2;
+
+    // Animate cubes to their destination positions
+    boxes.forEach(cube => {
+      let pos = destinationArray[cube.userData.name]; // Find the cube's target position
+      if (pos) {
+        gsap.to(cube.position, {
+          duration: 1,
+          x: pos.x,
+          y: face, // Adjust height dynamically
+          z: pos.z, // Fix the incorrect `pos.y` reference
+          ease: "power2.inOut",
+          onUpdate: () => {
+            cube.userData.boundBox.position.copy(cube.position);
+          }
+        });
+      }
+    });
+
+  }, 500);
+}
+
+
+
 
 //pca computation
 
@@ -1906,6 +2113,7 @@ const dissolution_of_friendship = createBox(
 // Enhancing concepts hierarchically and semantically
 enhanceBox(human_experience, 
   [cA], 
+  [],
   []
 );
 
@@ -1916,7 +2124,8 @@ enhanceBox(social_concept,
     [social_support, "Social support emerges from human interactions"],
     [peer_rejection, "Peer rejection is a social experience"],
     [dissolution_of_friendship, "Friendship dissolution is a social process"]
-  ]
+  ],
+  [psychological_concept]
 );
 
 enhanceBox(psychological_concept, 
@@ -1924,7 +2133,7 @@ enhanceBox(psychological_concept,
   [
     [loneliness, "Loneliness affects the human psyche"],
     [self_esteem, "Self-esteem is a fundamental psychological aspect"]
-  ]
+  ],[health_concept,friendship]
 );
 
 enhanceBox(health_concept, 
@@ -1932,7 +2141,7 @@ enhanceBox(health_concept,
   [
     [mental_health, "Mental health is a key dimension of well-being"],
     [physical_health, "Physical health contributes to overall well-being"]
-  ]
+  ], [social_support]
 );
 
 enhanceBox(friendship, 
@@ -1941,7 +2150,7 @@ enhanceBox(friendship,
     [social_support, "Friendship often involves providing social support"],
     [self_esteem, "Friendship can enhance self-esteem"],
     [dissolution_of_friendship, "Friendship can dissolve over time"]
-  ]
+  ], [mental_health]
 );
 
 enhanceBox(social_support, 
@@ -1949,7 +2158,7 @@ enhanceBox(social_support,
   [
     [mental_health, "Social support contributes to mental health"],
     [physical_health, "Social support can improve physical health outcomes"]
-  ]
+  ], [loneliness]
 );
 
 enhanceBox(mental_health, 
@@ -1957,7 +2166,7 @@ enhanceBox(mental_health,
   [
     [loneliness, "Poor mental health can result from loneliness"],
     [self_esteem, "Self-esteem influences mental health"]
-  ]
+  ],  [physical_health]
 );
 
 enhanceBox(physical_health, 
@@ -1965,7 +2174,7 @@ enhanceBox(physical_health,
   [
     [social_support, "Social support benefits physical health"],
     [mental_health, "Physical and mental health are interconnected"]
-  ]
+  ], []
 );
 
 enhanceBox(loneliness, 
@@ -1973,14 +2182,14 @@ enhanceBox(loneliness,
   [
     [peer_rejection, "Peer rejection often results in loneliness"],
     [mental_health, "Loneliness negatively affects mental health"]
-  ]
+  ], [peer_rejection]
 );
 
 enhanceBox(peer_rejection, 
   [social_concept], 
   [
     [self_esteem, "Peer rejection can harm self-esteem"]
-  ]
+  ], [self_esteem]
 );
 
 enhanceBox(self_esteem, 
@@ -1988,21 +2197,21 @@ enhanceBox(self_esteem,
   [
     [friendship, "Friendship enhances self-esteem"],
     [social_development, "Self-esteem is crucial for social development"]
-  ]
+  ], [social_development]
 );
 
 enhanceBox(social_development, 
   [social_concept], 
   [
     [self_esteem, "Self-esteem plays a role in social interactions"]
-  ]
+  ], [physical_health]
 );
 
 enhanceBox(dissolution_of_friendship, 
   [social_concept], 
   [
     [loneliness, "Friendship dissolution may lead to loneliness"]
-  ]
+  ], []
 );
 
 
