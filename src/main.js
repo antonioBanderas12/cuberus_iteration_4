@@ -14,6 +14,7 @@ import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeom
 // import PCA from 'pca-js';
 
 import { PCA } from 'ml-pca';  // Named import
+import { max } from 'simple-statistics';
 
 document.addEventListener('DOMContentLoaded', function() {
 
@@ -473,24 +474,46 @@ function onHover(cube) {
     cube.material.color.set(black);
 
 
-   cube.userData.sequence?.forEach((entity) => {
-    console.log("hello")
+    // cube.userData.sequence?.forEach((entity) => {
 
-     if (entity) {
-       createOutline(entity);
-       entity.material.color.set(black);
-       createLine(cube, entity);
-     }
+    //  if (entity) {
+    //    createOutline(entity);
+    //    entity.material.color.set(black);
+    //    createLine(cube, entity);
+    //  }
 
-    boxes.forEach(child => {
-      if(child.userData.sequence.includes(cube)){
-        createOutline(child);
-        child.material.color.set(black);
-        createLine(cube, child);
-      }
-    })
+    // boxes.forEach(child => {
+    //   if(child.userData.sequence.includes(cube)){
+    //     createOutline(child);
+    //     child.material.color.set(black);
+    //     createLine(cube, child);
+    //   }
+    // })
 
-   });
+  //  });
+
+
+      function tracePath(cube) {
+        let parents = boxes.filter(child => child.userData.sequence.includes(cube));
+
+        if (parents.length === 0) {
+            return;
+        }
+
+        parents.forEach(parent => {
+            createOutline(parent);
+            parent.material.color.set(black);
+            createLine(cube, parent);
+
+            // Recursively trace the path further
+            tracePath(parent);
+        });
+    }
+
+    tracePath(cube);
+
+
+
 
  }
   
@@ -773,8 +796,27 @@ function changeMode() {
     targetPosition.y += bigCubeSize;
     rot.set(-Math.PI / 2, 0, 0);
 
-    boxes.forEach(box => easeInBoxes(box));
-    boxes.filter(box => box.userData.status === "helperElement" ).forEach(box => box.visible = false); //&& box.userData.group !== "extraElement"
+    boxes.forEach(box => box.visible = false);
+    // boxes.filter(box => box.userData.sequence > 0).forEach(box => box.visible = true);
+
+    boxes.forEach(box => {
+      if(box.userData.sequence.length > 0) {
+        box.visible = true;
+      }
+    })
+
+    boxes.forEach(box => {
+      boxes.forEach(child => {
+        if (child.userData.sequence.includes(box)) {
+          box.visible = true;
+        }
+      });
+    });
+
+    //boxes.forEach(box => easeInBoxes(box));
+
+    //helli
+
     manNavigation();
 
   }
@@ -1070,26 +1112,53 @@ function removeHover(cube) {
   });
 
 
-  cube.userData.sequence?.forEach((entity) => {
-    if (entity) {
-      removeOutline(entity);
-      entity.material.color.set(entity.userData.colour);
-      removeLines(entity);
-    }
+  // cube.userData.sequence?.forEach((entity) => {
+  //   if (entity) {
+  //     removeOutline(entity);
+  //     entity.material.color.set(entity.userData.colour);
+  //     removeLines(entity);
+  //   }
 
 
-  })
+  // })
 
-    boxes.forEach(child => {
-      child.userData.sequence?.forEach((entity) => {
-        if(entity.userData.name === cube.userData.name){
-          removeOutline(entity);
-          entity.material.color.set(entity.userData.colour);
-          removeLines(entity);
-        }
+   
 
-      })
-    })
+    // boxes.forEach(child => {
+    //   if(child.userData.sequence.includes(cube)){
+    //     removeOutline(child);
+    //     child.material.color.set(child.userData.colour);
+    //     removeLines(child);
+    //   }
+    // })
+
+
+
+
+
+    function removetracePath(cube) {
+      let parents = boxes.filter(child => child.userData.sequence.includes(cube));
+
+      if (parents.length === 0) {
+          return;
+      }
+
+      parents.forEach(parent => {
+        removeOutline(parent);
+        parent.material.color.set(parent.userData.colour);
+        removeLines(parent);
+
+          // Recursively trace the path further
+          removetracePath(parent);
+      });
+  }
+
+  removetracePath(cube);
+
+
+
+
+
 
 
 
@@ -1616,7 +1685,9 @@ function latentPos() {
 }, 500);
 }
 
-function sequencePos() {
+
+ function sequencePos() {
+
   setTimeout(() => {
     // Fix rotations for all boxes
     boxes.forEach(cube => {
@@ -1624,63 +1695,114 @@ function sequencePos() {
       cube.userData.boundBox.rotation.set(-Math.PI / 2, 0, 0);
     });
 
-    // Get all referenced objects
-    let allSequences = new Set();
+    // Find all referenced boxes
+    let referencedBoxes = new Set();
     boxes.forEach(box => {
-      box.userData.sequence.forEach(seq => allSequences.add(seq));
+      box.userData.sequence.forEach(seq => referencedBoxes.add(seq));
     });
 
-    // Find starting objects (not referenced in any sequence)
-    let startObjects = boxes.filter(box => !allSequences.has(box));
+    let seqBoxes = boxes.filter(box => box.userData.sequence.length > 0);
+    // Identify start objects (not referenced anywhere)
+    let startObjects = seqBoxes.filter(box => !referencedBoxes.has(box));
 
     // Positioning parameters
-    let xStart = -100;  // Start position X
-    let yFixed = 50;   // Keep Y constant
-    let zStart = 0;    // Keep Z fixed
-    let xSpacing = 30; // Horizontal distance between boxes
-    let rowSpacing = 200; // Space between different start nodes
+    let xStart = -bigCubeSize / 2;  // Start X position
+    let yFixed = bigCubeSize / 2;   // Base Y position
+    let zStart = -bigCubeSize / 2;  // Start Z position
+    let xSpacing = 50;  // Horizontal distance
+    let ySpacing = 25;   // Vertical distance for branches
+    let rowSpacing = 50; // Space between independent sequences
 
     let destinationArray = {}; // Store target positions
     let placed = new Set();    // Track placed boxes
-    let queue = [];            // Queue for BFS-like placement
+    let queue = [];            // Queue for BFS traversal
 
-    // Position start objects in a horizontal row
+    // Position start objects in a vertical row
     startObjects.forEach((box, index) => {
-      let xPos = xStart + index * rowSpacing;
-      destinationArray[box.userData.name] = { x: xPos, y: yFixed, z: zStart };
-      placed.add(box);
-      queue.push({ box, x: xPos, depth: 0 });
+        let xPos = xStart;
+        let zPos = zStart + index * rowSpacing; // Each sequence starts on a different Z line
+        destinationArray[box.userData.name] = { x: xPos, y: yFixed, z: zPos };
+        placed.add(box);
+        queue.push({ box, x: xPos, y: yFixed, z: zPos }); // Store zPos in queue
     });
 
-    // Position subsequent objects
-    while (queue.length > 0) {
-      let { box, x, depth } = queue.shift();
-      let nextX = x; // Align new sequence nodes horizontally
-      let yOffset = (depth + 1) * xSpacing; // Move sequence horizontally
 
-      box.userData.sequence.forEach((nextBox, i) => {
-        if (!placed.has(nextBox)) {
-          let newX = nextX + i * xSpacing; // Staggered horizontally
-          destinationArray[nextBox.userData.name] = { x: newX, y: yFixed, z: zStart };
-          placed.add(nextBox);
-          queue.push({ box: nextBox, x: newX, depth: depth + 1 });
+
+
+
+    // Position subsequent objects with true alternating branching
+    while (queue.length > 0) {
+        let { box, x, y, z } = queue.shift(); // Get the z position from queue
+        let nextX = x + xSpacing; // Move next boxes to the right
+        let branchCount = box.userData.sequence.length;
+
+        if (branchCount === 1) {
+            // Single continuation follows parent’s z position
+            let nextBox = box.userData.sequence[0];
+            if (!placed.has(nextBox)) {
+                destinationArray[nextBox.userData.name] = { x: nextX, y: y, z: z };
+                placed.add(nextBox);
+                queue.push({ box: nextBox, x: nextX, y: y, z: z });
+            }
+        } else {
+            // Multiple branches: alternate between above and below
+            let yDirection = 1; // Start with up movement
+
+            box.userData.sequence.forEach((nextBox, i) => {
+                if (!placed.has(nextBox)) {
+                    let newY = y + (yDirection * Math.ceil(i / 2) * ySpacing);
+                    yDirection *= -1; // Toggle direction (up/down)
+
+                    // Keep the same z-position as parent
+                    destinationArray[nextBox.userData.name] = { x: nextX, y: newY, z: z };
+                    placed.add(nextBox);
+                    queue.push({ box: nextBox, x: nextX, y: newY, z: z });
+                }
+            });
         }
-      });
     }
 
-    console.log(destinationArray); // Check if positions are correct
+ let face = bigCubeSize / 2;
 
-    let face = bigCubeSize / 2;
 
-    // Animate cubes to their destination positions
+
+
+
+
+
+
+
+    // First pass: Calculate max X positions
+    let maxXPositions = {};
     boxes.forEach(cube => {
-      let pos = destinationArray[cube.userData.name]; // Find the cube's target position
+      let pos = destinationArray[cube.userData.name];
       if (pos) {
+        let refArray = boxes.filter(c => c.userData.sequence.includes(cube))
+                            .map(c => destinationArray[c.userData.name]);
+        
+        let maxX = Math.max(-1000, ...refArray.map(posRef => posRef ? posRef.x : 0));
+        maxXPositions[cube.userData.name] = maxX + xSpacing;
+
+        console.log(cube.userData.name, maxXPositions[cube.userData.name])
+
+      }
+    });
+
+
+    boxes.forEach(cube => {
+      let pos = destinationArray[cube.userData.name];
+      
+      if (pos) {
+        if (pos.x > 0){
+        pos.x = maxXPositions[cube.userData.name];
+        }
+
+
         gsap.to(cube.position, {
           duration: 1,
           x: pos.x,
-          y: face, // Adjust height dynamically
-          z: pos.z, // Fix the incorrect `pos.y` reference
+          y: face, // Adjust for scene positioning
+          z: pos.z + pos.y,
           ease: "power2.inOut",
           onUpdate: () => {
             cube.userData.boundBox.position.copy(cube.position);
@@ -1689,8 +1811,123 @@ function sequencePos() {
       }
     });
 
+
+
   }, 500);
 }
+
+
+
+
+
+
+
+
+// function sequencePos() {
+//   setTimeout(() => {
+//     // Fix rotations for all boxes
+//     boxes.forEach(cube => {
+//       cube.rotation.set(-Math.PI / 2, 0, 0);
+//       cube.userData.boundBox.rotation.set(-Math.PI / 2, 0, 0);
+//     });
+
+//     // Find all referenced boxes
+//     let referencedBoxes = new Set();
+//     boxes.forEach(box => {
+//       box.userData.sequence.forEach(seq => referencedBoxes.add(seq));
+//     });
+
+//     let seqBoxes = boxes.filter(box => box.userData.sequence.length > 0);
+//     // Identify start objects (not referenced anywhere)
+//     let startObjects = seqBoxes.filter(box => !referencedBoxes.has(box));
+
+//     // Positioning parameters
+//     let xStart = -bigCubeSize / 2;  // Start X position
+//     let yFixed = bigCubeSize / 2;   // Base Y position
+//     let zStart = -bigCubeSize / 2;  // Start Z position
+//     let xSpacing = 200;  // Horizontal distance
+//     let ySpacing = 50;   // Vertical distance for branches
+//     let rowSpacing = 100; // Space between independent sequences
+
+//     let destinationArray = {}; // Store target positions
+//     let placed = new Set();    // Track placed boxes
+//     let queue = [];            // Queue for BFS traversal
+
+//     // Position start objects in a vertical row
+//     startObjects.forEach((box, index) => {
+//         let xPos = xStart;
+//         let zPos = zStart + index * rowSpacing; // Each sequence starts on a different Z line
+//         destinationArray[box.userData.name] = { x: xPos, y: yFixed, z: zPos };
+//         placed.add(box);
+//         queue.push({ box, x: xPos, y: yFixed, z: zPos }); // Store zPos in queue
+//     });
+
+
+
+
+
+//     // Position subsequent objects with true alternating branching
+//     while (queue.length > 0) {
+//         let { box, x, y, z } = queue.shift(); // Get the z position from queue
+//         let nextX = x + xSpacing; // Move next boxes to the right
+//         let branchCount = box.userData.sequence.length;
+
+//         if (branchCount === 1) {
+//             // Single continuation follows parent’s z position
+//             let nextBox = box.userData.sequence[0];
+//             if (!placed.has(nextBox)) {
+//                 destinationArray[nextBox.userData.name] = { x: nextX, y: y, z: z };
+//                 placed.add(nextBox);
+//                 queue.push({ box: nextBox, x: nextX, y: y, z: z });
+//             }
+//         } else {
+//             // Multiple branches: alternate between above and below
+//             let yDirection = 1; // Start with up movement
+
+//             box.userData.sequence.forEach((nextBox, i) => {
+//                 if (!placed.has(nextBox)) {
+//                     let newY = y + (yDirection * Math.ceil(i / 2) * ySpacing);
+//                     yDirection *= -1; // Toggle direction (up/down)
+
+//                     // Keep the same z-position as parent
+//                     destinationArray[nextBox.userData.name] = { x: nextX, y: newY, z: z };
+//                     placed.add(nextBox);
+//                     queue.push({ box: nextBox, x: nextX, y: newY, z: z });
+//                 }
+//             });
+//         }
+//     }
+
+//     console.log(destinationArray); // Debugging: Check positions
+
+//     let face = bigCubeSize / 2;
+
+//     // Animate cubes to their new positions
+//     boxes.forEach(cube => {
+//         let pos = destinationArray[cube.userData.name]; // Find target position
+//         if (pos) {
+//             gsap.to(cube.position, {
+//                 duration: 1,
+//                 x: pos.x,
+//                 y: face, // Adjust for scene positioning
+//                 z: pos.z + pos.y,
+//                 ease: "power2.inOut",
+//                 onUpdate: () => {
+//                     cube.userData.boundBox.position.copy(cube.position);
+//                 }
+//             });
+//         }
+//     });
+
+//   }, 500);
+// }
+
+
+
+
+
+
+
 
 
 
@@ -2133,7 +2370,7 @@ enhanceBox(psychological_concept,
   [
     [loneliness, "Loneliness affects the human psyche"],
     [self_esteem, "Self-esteem is a fundamental psychological aspect"]
-  ],[health_concept,friendship]
+  ],[health_concept, loneliness]
 );
 
 enhanceBox(health_concept, 
@@ -2158,7 +2395,7 @@ enhanceBox(social_support,
   [
     [mental_health, "Social support contributes to mental health"],
     [physical_health, "Social support can improve physical health outcomes"]
-  ], [loneliness]
+  ], []
 );
 
 enhanceBox(mental_health, 
